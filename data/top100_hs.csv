@@ -1,0 +1,11 @@
+hs_code,title,description,sectors,capex_min,capex_max,seed_month_value,top_country
+850440,Static converters,Power converters,{electronics},50000,200000,120000,China
+840721,Reactors and vessels,Industrial pressure vessels,{industrial},70000,300000,80000,Germany
+854231,Integrated circuits,ICs general,{electronics},1000000,5000000,500000,China
+870323,Motor vehicles,Passenger vehicles,{automotive},2000000,8000000,1500000,Germany
+730799,Tube/pipe fittings,Steel fittings,{metals},25000,120000,45000,China
+841459,Industrial fans,Axial fans,{industrial},30000,200000,60000,Thailand
+848180,Valves (other),General-purpose valves,{metals},40000,250000,90000,China
+850760,Lithium-ion batteries,Rechargeable cells/packs,{energy,electronics},200000,1500000,300000,China
+902710,Gas/smoke analyzers,Environmental instruments,{instruments},60000,350000,70000,Japan
+940540,LED lamps,LED bulbs and lamps,{electronics},50000,300000,85000,Vietnam
