@@ -19,6 +19,7 @@ class BaselineResult:
     baseline_period: Optional[str]
     start: Optional[Tuple[int, int]]
     end: Optional[Tuple[int, int]]
+    method: str
 
 
 def _month_key(year: int, month: int) -> int:
@@ -44,13 +45,49 @@ def _parse_period(period: Optional[str]) -> Optional[Tuple[Tuple[int, int], Tupl
     return (start_year, start_month), (end_year, end_month)
 
 
-def recompute_baseline(conn=None) -> Dict[str, int]:
+def _shift_month(year: int, month: int, delta: int) -> Tuple[int, int]:
+    key = _month_key(year, month) + delta
+    if key < 0:
+        raise ValueError("Month delta produced negative value")
+    quotient, remainder = divmod(key, 12)
+    return quotient, remainder + 1
+
+
+def _collect_window(
+    monthly_map: Dict[Tuple[int, int], float],
+    end_year: int,
+    end_month: int,
+    length: int = 12,
+) -> Optional[List[Tuple[Tuple[int, int], float]]]:
+    window: List[Tuple[Tuple[int, int], float]] = []
+    for offset in range(length - 1, -1, -1):
+        year, month = _shift_month(end_year, end_month, -offset)
+        value = monthly_map.get((year, month))
+        if value is None:
+            return None
+        window.append(((year, month), float(value)))
+    return window
+
+
+def _calendar_year_window(
+    monthly_map: Dict[Tuple[int, int], float], year: int
+) -> Optional[List[Tuple[Tuple[int, int], float]]]:
+    months = []
+    for month in range(1, 13):
+        value = monthly_map.get((year, month))
+        if value is None:
+            return None
+        months.append(((year, month), float(value)))
+    return months
+
+
+def recompute_baseline(conn=None, period: str = "last_24m") -> Dict[str, int]:
     """Recompute the baseline_imports table for all products."""
 
     own_connection = conn is None
     if own_connection:
         with db.connect() as managed:
-            return recompute_baseline(managed)
+            return recompute_baseline(managed, period=period)
 
     results: List[BaselineResult] = []
     with conn.cursor(cursor_factory=RealDictCursor) as cur:
@@ -71,37 +108,51 @@ def recompute_baseline(conn=None) -> Dict[str, int]:
             )
             monthly = cur.fetchall()
 
-        if len(monthly) < 12:
-            results.append(BaselineResult(code, None, "insufficient_data", None, None))
+        if not monthly:
+            results.append(BaselineResult(code, None, None, None, None, "none"))
             continue
 
-        baseline_value: Optional[float] = None
-        baseline_period: Optional[str] = None
-        baseline_months: Optional[List[Tuple[int, int]]] = None
+        monthly_map = {
+            (row["year"], row["month"]): float(row["total"] or 0) for row in monthly
+        }
 
-        for idx in range(0, len(monthly) - 11):
-            window = monthly[idx : idx + 12]
-            months = [(row["year"], row["month"]) for row in window]
-            if not _ensure_contiguous(months):
-                continue
-            baseline_value = sum(float(row["total"] or 0) for row in window)
-            start_year, start_month = months[0]
-            end_year, end_month = months[-1]
-            baseline_period = f"{start_year:04d}-{start_month:02d}_to_{end_year:04d}-{end_month:02d}"
-            baseline_months = months
-            break
+        latest_year, latest_month = max(monthly_map, key=lambda item: _month_key(*item))
 
-        if baseline_months is None:
-            results.append(BaselineResult(code, None, "insufficient_data", None, None))
+        window: Optional[List[Tuple[Tuple[int, int], float]]] = None
+        method = "none"
+
+        if period == "last_24m":
+            window = _collect_window(monthly_map, latest_year, latest_month, 12)
+            if window:
+                method = "rolling"
+
+        if window is None:
+            # fallback to most recent full calendar year
+            candidate_years = sorted({year for year, _ in monthly_map.keys()}, reverse=True)
+            for candidate in candidate_years:
+                calendar_window = _calendar_year_window(monthly_map, candidate)
+                if calendar_window:
+                    window = calendar_window
+                    method = "calendar_year"
+                    break
+
+        if window is None:
+            results.append(BaselineResult(code, None, None, None, None, method))
             continue
+
+        start_year, start_month = window[0][0]
+        end_year, end_month = window[-1][0]
+        baseline_value = sum(value for _, value in window)
+        baseline_period = f"{start_year:04d}-{start_month:02d}_to_{end_year:04d}-{end_month:02d}"
 
         results.append(
             BaselineResult(
                 code,
                 baseline_value,
                 baseline_period,
-                baseline_months[0],
-                baseline_months[-1],
+                (start_year, start_month),
+                (end_year, end_month),
+                method,
             )
         )
 
@@ -121,7 +172,14 @@ def recompute_baseline(conn=None) -> Dict[str, int]:
     LOGGER.info("Baseline recompute complete for %s products", len(results))
 
     with_count = sum(1 for item in results if item.baseline_value is not None)
-    return {"processed": len(results), "with_baseline": with_count}
+    rolling_count = sum(1 for item in results if item.method == "rolling")
+    calendar_count = sum(1 for item in results if item.method == "calendar_year")
+    return {
+        "processed": len(results),
+        "with_baseline": with_count,
+        "rolling": rolling_count,
+        "calendar_year": calendar_count,
+    }
 
 
 def recompute_progress(conn=None) -> Dict[str, int]:
