@@ -5,10 +5,10 @@ FastAPI service and minimal client to explore India's import dependency opportun
 ## Requirements
 
 - Python 3.10+
-- Postgres database (e.g. Railway, Supabase, local Docker)
+- Postgres database (Railway, Supabase, local Docker, etc.)
 - Environment variables: `DATABASE_URL`, `ADMIN_KEY`
 
-Copy `.env.example` and fill in your credentials for local development.
+Copy `.env.example` into `.env` and fill in your credentials for local development.
 
 ## Installation
 
@@ -20,7 +20,7 @@ pip install -r requirements.txt
 
 ## Running locally
 
-1. Export `DATABASE_URL` and `ADMIN_KEY` (or use a `.env` file with `python-dotenv`).
+1. Export `DATABASE_URL` and `ADMIN_KEY` (or load them from `.env` via `python-dotenv`).
 2. Ensure the target Postgres database exists.
 3. Start the API:
 
@@ -28,18 +28,11 @@ pip install -r requirements.txt
 uvicorn server.main:app --host 0.0.0.0 --port 8000
 ```
 
-The minimal client is in `client/index.html`. Open it via a lightweight static server (e.g. `python -m http.server`) that proxies API calls to your FastAPI instance.
-
-## Railway deployment
-
-1. Create a new Railway project and add a Postgres plugin.
-2. Set `DATABASE_URL` to the Railway Postgres connection string and choose a secure `ADMIN_KEY`.
-3. Use the provided start command: `uvicorn server.main:app --host 0.0.0.0 --port $PORT`.
-4. Deploy.
+4. Serve the minimal client in `client/index.html` with a lightweight static server (for example, `python -m http.server`) and proxy API calls to your FastAPI instance.
 
 ## Database seeding
 
-After deploying or running locally, trigger the seed job (replace host and admin key):
+Trigger the seed job after deploying or running locally (replace host and admin key):
 
 ```bash
 curl -X POST \
@@ -61,6 +54,19 @@ Running the seed endpoint is idempotent: products are upserted and monthly impor
 - `GET /api/domestic_capability/{hs}` – public, verified capability entries.
 
 All responses include `source` and `last_updated` metadata where applicable, and empty datasets return empty arrays instead of errors.
+
+## Railway deployment
+
+1. Create a new Railway project and add a Postgres plugin.
+2. Set `DATABASE_URL` to the Railway Postgres connection string and choose a secure `ADMIN_KEY`.
+3. Use the provided start command: `uvicorn server.main:app --host 0.0.0.0 --port $PORT`.
+4. Deploy.
+
+### Post-deploy checks
+
+- Seed: `curl -X POST -H "Authorization: Bearer $ADMIN_KEY" https://<your-railway-url>/admin/seed`
+- Verify products: `https://<your-railway-url>/api/products`
+- Verify detail: `https://<your-railway-url>/api/products/850440`
 
 ## Donations
 
