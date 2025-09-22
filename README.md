@@ -1,5 +1,21 @@
 # importdependencymap
 
+Product vision (MVP)
+
+A website where each imported item (HS code level) has:
+
+monthly import value & quantity (time series) and top source countries (trend).
+
+domestic production baseline (if available), tariff and policy flags.
+
+componentization: which sub-parts are imported, BOM-like listing.
+
+“what it would take to build in India”: rough tech stack, required machinery, estimated CAPEX/OPEX ranges, skilled labour needs.
+
+economic opportunity score (how attractive to local manufacturers).
+
+business case generator: simple calculator that shows estimated revenue, payback, and break-even based on replacing X% imports.
+
 Project: build-for-india — Autonomous V1 roadmap (Codex / Cursor)
 Goal (one line)
 
