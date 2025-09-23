@@ -1,6 +1,6 @@
 # Build for India
 
-Build for India helps identify domestic manufacturing opportunities by tracking imports, opportunity scores, and partner concentration for each HS code. The stack pairs a FastAPI backend, Postgres analytics tables, and a lightweight static client served from the same origin.
+Build for India helps identify domestic manufacturing opportunities by tracking imports, opportunity scores, and partner concentration for each HS code. The stack pairs a FastAPI backend, Postgres analytics tables, and a lightweight static client served from the same origin. Live trade data is sourced from the UN Comtrade API (HS6 monthly series for India), with hooks reserved for a future DGCI&S integration.
 
 ## Requirements
 - Python 3.10+
@@ -35,8 +35,12 @@ These scripts call the protected admin endpoints, populating sample HS data from
 ### Database Requirement
 `DATABASE_URL` must be configured. Admin endpoints and API queries fail fast when the database is unreachable to prevent serving stale placeholder data.
 
+### Seed CSV (optional)
+`data/top100_hs.csv` contains a curated starter list that can be ingested via `/admin/seed` after the database connection is working. It is purely a bootstrap aid and is not used automatically.
+
 ## ETL & Automation
 - `POST /admin/etl/comtrade?from=YYYY-MM&to=YYYY-MM` downloads monthly UN Comtrade data (HS6), upserts products/imports, and recomputes metrics.
+- `server/etl/dgcis.py` is a stub reserved for authenticated DGCI&S ingestion; no data is loaded from it yet.
 - `.github/workflows/ci.yml` installs dependencies, runs `python -m compileall server`, and executes tests.
 - `.github/workflows/nightly_etl.yml` triggers the Comtrade ETL and recompute every night at 03:00 UTC. Configure repository secrets `ADMIN_KEY` and `DEPLOY_URL`.
 
