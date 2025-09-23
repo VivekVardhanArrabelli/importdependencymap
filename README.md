@@ -42,8 +42,10 @@ These scripts call the protected admin endpoints, populating sample HS data from
 `data/top100_hs.csv` contains a curated starter list that can be ingested via `/admin/seed` after the database connection is working. It is purely a bootstrap aid and is not used automatically.
 
 ## Data Sources
+
 - **UN Comtrade** – live HS6 monthly import data for India accessed via the public API. All automated ETL jobs and analytics run on this feed today.
 - **DGCI&S manual CSV ingests** – optional, triggered via `POST /admin/etl/dgcis` after you export a CSV from tradestat.commerce.gov.in. These loads share the same normalization and recompute steps but require you to place the CSV on disk first.
+
 
 ## ETL & Automation
 - `POST /admin/etl/comtrade?from=YYYY-MM&to=YYYY-MM` downloads monthly UN Comtrade data (HS6), upserts products/imports, and recomputes metrics.
