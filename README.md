@@ -30,6 +30,10 @@ uvicorn server.main:app --host 0.0.0.0 --port 8000
 
 The minimal client is in `client/index.html`. Open it via a lightweight static server (e.g. `python -m http.server`) that proxies API calls to your FastAPI instance.
 
+### Running without Postgres (CSV fallback)
+
+If you don't have a database handy, just omit `DATABASE_URL`. The API will serve product lists, detail, and leaderboard from `data/top100_hs.csv` and the client will load from `/` directly.
+
 ## Railway deployment
 
 1. Create a new Railway project and add a Postgres plugin.
