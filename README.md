@@ -1,74 +1,77 @@
 # Build for India
 
-FastAPI service and minimal client to explore India's import dependency opportunities. The project ships with Postgres schema management, seeding utilities, and heuristics to prioritise HS codes.
+Build for India helps identify domestic manufacturing opportunities by tracking imports, opportunity scores, and partner concentration for each HS code. The stack pairs a FastAPI backend, Postgres analytics tables, CSV fallbacks, and a lightweight static client served from the same origin.
 
 ## Requirements
-
 - Python 3.10+
-- Postgres database (e.g. Railway, Supabase, local Docker)
-- Environment variables: `DATABASE_URL`, `ADMIN_KEY`
+- Postgres database (Railway recommended)
+- Environment variables:
+  - `DATABASE_URL` – Postgres URL (`?sslmode=require` for managed DBs)
+  - `ADMIN_KEY` – bearer token for admin routes
+  - `COMTRADE_BASE` (optional) – defaults to `https://comtradeapi.un.org/public/v1/preview`
+  - `COMTRADE_FLOW` (default `import`), `COMTRADE_REPORTER` (default `India`), `COMTRADE_FREQ` (default `M`)
+  - Optional observability keys: `SENTRY_DSN`, `GA_MEASUREMENT_ID`
 
-Copy `.env.example` and fill in your credentials for local development.
+Copy `.env.example`, fill the values, and never commit live secrets.
 
-## Installation
-
+## Local Development
 ```bash
 python -m venv .venv
 source .venv/bin/activate
 pip install -r requirements.txt
-```
-
-## Running locally
-
-1. Export `DATABASE_URL` and `ADMIN_KEY` (or use a `.env` file with `python-dotenv`).
-2. Ensure the target Postgres database exists.
-3. Start the API:
-
-```bash
 uvicorn server.main:app --host 0.0.0.0 --port 8000
 ```
 
-The minimal client is in `client/index.html`. Open it via a lightweight static server (e.g. `python -m http.server`) that proxies API calls to your FastAPI instance.
+The API serves the static client at `/` when `client/` exists. Alternatively run `python -m http.server --directory client 8080` during development.
 
-### Running without Postgres (CSV fallback)
+### Seeding & Metrics
+```bash
+export ADMIN_KEY=dev-secret
+./scripts/seed_local.sh http://localhost:8000
+./scripts/recompute_local.sh http://localhost:8000
+```
+These scripts call the protected admin endpoints, populating sample HS data from `data/top100_hs.csv` and recomputing baselines/opportunity scores.
 
-If you don't have a database handy, just omit `DATABASE_URL`. The API will serve product lists, detail, and leaderboard from `data/top100_hs.csv` and the client will load from `/` directly.
+### Running without Postgres
+If `DATABASE_URL` is unset the API and client fall back to the CSV seed. You still get product listings, detail pages, and leaderboards without persistence.
 
-## Railway deployment
+## ETL & Automation
+- `POST /admin/etl/comtrade?from=YYYY-MM&to=YYYY-MM` downloads monthly UN Comtrade data (HS6), upserts products/imports, and recomputes metrics with CSV fallback on failure.
+- `.github/workflows/ci.yml` installs dependencies, runs `python -m compileall server`, and executes tests.
+- `.github/workflows/nightly_etl.yml` triggers the Comtrade ETL and recompute every night at 03:00 UTC. Configure repository secrets `ADMIN_KEY` and `DEPLOY_URL`.
 
-1. Create a new Railway project and add a Postgres plugin.
-2. Set `DATABASE_URL` to the Railway Postgres connection string and choose a secure `ADMIN_KEY`.
-3. Use the provided start command: `uvicorn server.main:app --host 0.0.0.0 --port $PORT`.
-4. Deploy.
+## Testing
+- Add tests under `tests/` using `pytest` (fallback to `python -m unittest discover`).
+- Run `pytest` locally before opening a PR.
+- Ensure `python -m compileall server` passes to catch syntax issues.
 
-## Database seeding
+## Deployment (Railway)
+1. Provision a Railway service with Postgres.
+2. Set environment variables above in **Project → Variables**.
+3. Use the start command: `uvicorn server.main:app --host 0.0.0.0 --port $PORT`.
+4. Optionally create a nightly job to hit `/admin/etl/comtrade` and `/admin/recompute` (see workflow for reference).
 
-After deploying or running locally, trigger the seed job (replace host and admin key):
-
+Seed or refresh data after deployment:
 ```bash
 curl -X POST \
   -H "Authorization: Bearer $ADMIN_KEY" \
-  https://your-hostname/admin/seed
+  "$RAILWAY_URL/admin/seed"
 ```
 
-Running the seed endpoint is idempotent: products are upserted and monthly imports updated. The handler also recomputes baselines and progress metrics.
+## API Surface
+- `GET /health`
+- `POST /admin/seed`
+- `POST /admin/etl/comtrade`
+- `POST /admin/recompute`
+- `GET /api/products`
+- `GET /api/products/{hs}`
+- `GET /api/leaderboard`
+- `POST /api/domestic_capability`
+- `GET /api/domestic_capability/{hs}`
 
-## API overview
-
-- `GET /health` – readiness probe.
-- `POST /admin/seed` – protected seed job. Creates tables, loads sample HS codes, recomputes metrics.
-- `POST /admin/recompute` – protected recompute of baselines and opportunity scores.
-- `GET /api/products` – filterable list of product cards with opportunity data.
-- `GET /api/products/{hs}` – product detail, 36-month series, top partners, progress metrics.
-- `GET /api/leaderboard` – top HS codes by opportunity, progress, or value.
-- `POST /api/domestic_capability` – protected upsert of capability inputs (flagged as unverified).
-- `GET /api/domestic_capability/{hs}` – public, verified capability entries.
-
-All responses include `source` and `last_updated` metadata where applicable, and empty datasets return empty arrays instead of errors.
+Responses include `source` and `last_updated` metadata so the client can communicate freshness.
 
 ## Donations
-
-Support future iterations via:
-
-- GitHub Sponsors (coming soon)
-- Open Collective (coming soon)
+Support future roadmap items (DGCI&S ETL, policy overlays, supplier registry) via:
+- GitHub Sponsors – coming soon
+- Open Collective – coming soon
