@@ -44,9 +44,21 @@ def _base_url() -> str:
 
 
 
+def _resolve_endpoint() -> str:
+    """Return the fully qualified endpoint for Comtrade requests."""
+
+    base = _base_url().rstrip("/")
+    path = os.getenv("COMTRADE_PATH")
+    if path:
+        endpoint = parse.urljoin(base + "/", path.lstrip("/"))
+    else:
+        endpoint = parse.urljoin(base + "/", "v1/get/HS")
+    return endpoint
+
+
 def _request(params: Dict[str, str]) -> Dict:
     query = parse.urlencode(params)
-    url = f"{_base_url().rstrip('/')}/v1/get/HS?{query}"
+    url = f"{_resolve_endpoint()}?{query}"
     for attempt in range(1, MAX_RETRIES + 1):
         try:
             with request.urlopen(url, timeout=45) as resp:
@@ -118,10 +130,14 @@ def fetch_range(
     reporter: Optional[str] = None,
     flow: Optional[str] = None,
     frequency: Optional[str] = None,
+    reporter_code: Optional[str] = None,
 ) -> List[Record]:
     reporter = reporter or os.getenv("COMTRADE_REPORTER", "India")
+    reporter_code = reporter_code or os.getenv("COMTRADE_REPORTER_CODE")
     flow = flow or os.getenv("COMTRADE_FLOW", "import")
     frequency = frequency or os.getenv("COMTRADE_FREQ", "M")
+    partner = os.getenv("COMTRADE_PARTNER")
+    partner_code = os.getenv("COMTRADE_PARTNER_CODE")
 
     params = {
         "reporter": reporter,
@@ -131,6 +147,12 @@ def fetch_range(
         "type": "C",
         "classification": "HS",
     }
+    if reporter_code:
+        params["reporterCode"] = reporter_code
+    if partner_code:
+        params["partnerCode"] = partner_code
+    elif partner:
+        params["partner"] = partner
     payload = _request(params)
     dataset = payload.get("dataset") or []
     LOGGER.info("Fetched %s rows from Comtrade", len(dataset))
@@ -156,21 +178,26 @@ def load(
                 capex_max=record.capex_max,
             )
             products_seen[record.hs_code] = True
+        fx_rate: Optional[float]
         try:
             fx_rate = forex.monthly_rate(record.year, record.month)
-        except RuntimeError as exc:
-            raise RuntimeError(
-                f"Missing FX rate for {record.year}-{record.month:02d} while processing {record.hs_code}"
-            ) from exc
+        except RuntimeError:
+            LOGGER.warning(
+                "Missing FX rate for %s %s-%02d; storing without INR conversion",
+                record.hs_code,
+                record.year,
+                record.month,
+            )
+            fx_rate = None
 
         value_usd = record.value_usd
         value_inr = record.value_inr
         if value_usd is None and value_inr is None:
             LOGGER.debug("Skipping record %s due to missing monetary values", record)
             continue
-        if value_inr is None and value_usd is not None:
+        if fx_rate is not None and value_inr is None and value_usd is not None:
             value_inr = value_usd * fx_rate
-        if value_usd is None and value_inr is not None:
+        if fx_rate is not None and value_usd is None and value_inr is not None:
             value_usd = value_inr / fx_rate
 
         db.insert_monthly(
