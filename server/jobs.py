@@ -19,26 +19,39 @@ class MonthlyTotal:
     total: float
 
 
-def _month_key(year: int, month: int) -> int:
-    return year * 12 + (month - 1)
+def _next_month(year: int, month: int) -> Tuple[int, int]:
+    if month == 12:
+        return year + 1, 1
+    return year, month + 1
 
 
-def _ensure_contiguous(months: List[Tuple[int, int]]) -> bool:
-    if len(months) < 2:
-        return True
-    start_key = _month_key(*months[0])
-    return all(_month_key(year, month) == start_key + idx for idx, (year, month) in enumerate(months))
+def _fill_missing_months(monthly: List[MonthlyTotal]) -> List[MonthlyTotal]:
+    """Return a contiguous series, inserting zero totals for gaps."""
+
+    if not monthly:
+        return []
+
+    totals = {(row.year, row.month): float(row.total) for row in monthly}
+    start_year, start_month = monthly[0].year, monthly[0].month
+    end_year, end_month = monthly[-1].year, monthly[-1].month
+
+    filled: List[MonthlyTotal] = []
+    year, month = start_year, start_month
+    while True:
+        filled.append(MonthlyTotal(year, month, totals.get((year, month), 0.0)))
+        if (year, month) == (end_year, end_month):
+            break
+        year, month = _next_month(year, month)
+    return filled
 
 
-def _window_of_12(monthly: List[MonthlyTotal]) -> Optional[List[MonthlyTotal]]:
-    if len(monthly) < 12:
+def _window_of_12(monthly: List[MonthlyTotal], *, latest: bool = False) -> Optional[List[MonthlyTotal]]:
+    filled = _fill_missing_months(monthly)
+    if len(filled) < 12:
         return None
-    for idx in range(0, len(monthly) - 11):
-        window = monthly[idx : idx + 12]
-        months = [(row.year, row.month) for row in window]
-        if _ensure_contiguous(months):
-            return window
-    return None
+    if latest:
+        return filled[-12:]
+    return filled[:12]
 
 
 def _monthly_totals(conn, hs_code: str) -> List[MonthlyTotal]:
@@ -119,7 +132,7 @@ def recompute_progress(conn=None) -> Dict[str, int]:
         hs_code = row["hs_code"]
         sectors = row.get("sectors") or []
         monthly = _monthly_totals(conn, hs_code)
-        window = _window_of_12(monthly)
+        window = _window_of_12(monthly, latest=True)
         if not window:
             metrics[hs_code] = {
                 "current": None,
