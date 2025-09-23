@@ -177,6 +177,7 @@ def fetch_range(
     reporter_code: Optional[str] = None,
 ) -> List[Record]:
     reporter = reporter or os.getenv("COMTRADE_REPORTER", "India")
+
     reporter_code_env = os.getenv("COMTRADE_REPORTER_CODE")
     reporter_code = reporter_code or (reporter_code_env.strip() if reporter_code_env else "699")
     flow = flow or os.getenv("COMTRADE_FLOW", "import")
@@ -184,6 +185,7 @@ def fetch_range(
     partner = os.getenv("COMTRADE_PARTNER")
     partner_code_env = os.getenv("COMTRADE_PARTNER_CODE")
     partner_code = partner_code_env.strip() if partner_code_env else "0"
+
 
     base_params = {
         "reporter": reporter,
@@ -194,6 +196,7 @@ def fetch_range(
         "classification": "HS",
     }
     if reporter_code:
+
         base_params["reporterCode"] = reporter_code
     if partner_code:
         base_params["partnerCode"] = partner_code
@@ -217,6 +220,7 @@ def fetch_range(
         cursor = _next_cursor(payload)
         if not cursor:
             break
+
 
     LOGGER.info("Fetched %s rows from Comtrade", len(dataset))
     return _parse_dataset(dataset)

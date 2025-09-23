@@ -20,17 +20,22 @@ class ComtradeETLTest(unittest.TestCase):
         os.environ["COMTRADE_REPORTER"] = "India"
         os.environ["COMTRADE_FLOW"] = "import"
 
+
         comtrade.fetch_range("2024-01", "2024-02")
+
 
         called_params = mock_request.call_args[0][0]
         self.assertEqual(called_params["reporter"], "India")
         self.assertEqual(called_params["flow"], "import")
+
         self.assertEqual(called_params["time_period"], "2024-01:2024-02")
         self.assertEqual(called_params["reporterCode"], "699")
         self.assertEqual(called_params["partnerCode"], "0")
 
+
         os.environ.pop("COMTRADE_REPORTER", None)
         os.environ.pop("COMTRADE_FLOW", None)
+
 
     @patch("server.etl.comtrade._request")
     def test_fetch_range_handles_pagination_and_validation(self, mock_request):
@@ -68,6 +73,7 @@ class ComtradeETLTest(unittest.TestCase):
 
         with self.assertRaises(RuntimeError):
             comtrade.fetch_range("2024-01", "2024-01")
+
 
     @patch("server.etl.comtrade.db.insert_monthly")
     @patch("server.etl.comtrade.db.upsert_product")
