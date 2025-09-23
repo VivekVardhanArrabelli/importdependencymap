@@ -42,37 +42,14 @@ These scripts call the protected admin endpoints, populating sample HS data from
 `data/top100_hs.csv` contains a curated starter list that can be ingested via `/admin/seed` after the database connection is working. It is purely a bootstrap aid and is not used automatically.
 
 ## Data Sources
-- **DGCI&S / Tradestat** – official monthly import/export databank for India; scheduled integration will ingest HS-level CSV/API exports (`tradestat.commerce.gov.in`).
-- **UN Comtrade** – currently integrated live source providing partner-country flows and historical HS trade series.
-- **WITS / World Bank** – planned source for tariff, duty, and policy metrics (`wits.worldbank.org`).
-- **data.gov.in / OGD India** – planned source for ITC/HS mappings, import policy notifications, and allied government datasets (`data.gov.in`).
-- **Crowdsourced & vendor inputs** – CAPEX/OPEX templates, machine vendor directories, and skills taxonomies curated via the community.
+- **UN Comtrade** – live HS6 monthly import data for India accessed via the public API. All automated ETL jobs and analytics run on this feed today.
+- **DGCI&S manual CSV ingests** – optional, triggered via `POST /admin/etl/dgcis` after you export a CSV from tradestat.commerce.gov.in. These loads share the same normalization and recompute steps but require you to place the CSV on disk first.
 
 ## ETL & Automation
 - `POST /admin/etl/comtrade?from=YYYY-MM&to=YYYY-MM` downloads monthly UN Comtrade data (HS6), upserts products/imports, and recomputes metrics.
 - `POST /admin/etl/dgcis?file_path=...` ingests DGCI&S CSV exports (USD/INR values, partner mix) and recomputes analytics.
 - `.github/workflows/ci.yml` installs dependencies, runs `python -m compileall server`, and executes tests.
 - `.github/workflows/nightly_etl.yml` triggers the Comtrade ETL and recompute every night at 03:00 UTC. Configure repository secrets `ADMIN_KEY` and `DEPLOY_URL`.
-
-### Pipeline Blueprint
-**Source pulls**
-- Monthly exports from Tradestat/DGCI&S (planned) for official HS-level commodity data.
-- UN Comtrade API (implemented) for partner-country flows and historical series.
-- WITS for tariffs and applied duty information (planned).
-- data.gov.in datasets for ITC/HS mappings, policy circulars, and restrictions (planned).
-
-**Transform & Normalize**
-- Canonicalise HS codes (6/8/10 digit) using `server/etl/normalize.py`.
-- Store monetary values in USD today; roadmap includes persisting INR alongside exchange rates.
-- Compute rolling 12-month totals, YoY growth, partner concentration (HHI), and import share via `server/jobs.py`.
-
-**Enrich**
-- Attach tariff and policy flags using WITS/commerce ministry data (future work).
-- Load crowdsourced CAPEX/OPEX templates and machine catalogs into `domestic_capability` entries.
-
-**Serve**
-- Persist analytics in Postgres tables (`products`, `monthly_imports`, `baseline_imports`, `import_progress`, `domestic_capability`).
-- Expose REST endpoints (`/api/products`, `/api/products/{hs}`, `/api/leaderboard`, `/api/domestic_capability`, admin routes) for UI/API consumption.
 
 ### Data Model Snapshot
 ```sql
