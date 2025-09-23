@@ -4,235 +4,73 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Build for India</title>
-    <style>
-      body {
-        font-family: Arial, sans-serif;
-        margin: 0;
-        padding: 0;
-        background: #f8f9fb;
-      }
-      header {
-        background: #0a4d8c;
-        color: #fff;
-        padding: 1rem 2rem;
-      }
-      main {
-        padding: 1rem 2rem;
-        display: grid;
-        grid-template-columns: 320px 1fr;
-        gap: 1.5rem;
-      }
-      .panel {
-        background: #fff;
-        border-radius: 8px;
-        padding: 1rem;
-        box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
-      }
-      label {
-        font-size: 0.85rem;
-        display: block;
-        margin-bottom: 0.25rem;
-        font-weight: bold;
-      }
-      input,
-      select,
-      button {
-        width: 100%;
-        padding: 0.5rem;
-        margin-bottom: 0.75rem;
-        border: 1px solid #cbd5e0;
-        border-radius: 4px;
-        font-size: 0.9rem;
-      }
-      button {
-        background: #0a4d8c;
-        color: #fff;
-        cursor: pointer;
-      }
-      button:hover {
-        background: #083b6b;
-      }
-      .cards {
-        display: grid;
-        gap: 1rem;
-      }
-      .card {
-        padding: 1rem;
-        border: 1px solid #e2e8f0;
-        border-radius: 8px;
-        background: #fff;
-        cursor: pointer;
-        transition: border-color 0.2s ease;
-      }
-      .card:hover {
-        border-color: #0a4d8c;
-      }
-      .chip {
-        display: inline-block;
-        background: #edf2f7;
-        padding: 0.2rem 0.5rem;
-        border-radius: 999px;
-        margin: 0.15rem 0.25rem 0.15rem 0;
-        font-size: 0.75rem;
-      }
-      #detail h2 {
-        margin-top: 0;
-      }
-      canvas {
-        max-width: 100%;
-      }
-      .meta {
-        font-size: 0.85rem;
-        color: #4a5568;
-        margin-top: 0.5rem;
-      }
-    </style>
-    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <link rel="stylesheet" href="styles.css" />
   </head>
   <body>
-    <header>
-      <h1>Build for India Import Dashboard</h1>
+    <header class="topbar">
+      <div class="brand">Build for India</div>
+      <nav>
+        <a href="https://github.com/VivekVardhanArrabelli/importdependencymap" target="_blank" rel="noopener">GitHub</a>
+        <a href="https://opencollective.com" target="_blank" rel="noopener">Donate</a>
+      </nav>
     </header>
-    <main>
-      <section class="panel" id="filters">
+    <section class="hero">
+      <h2>Identify high-impact import substitutions</h2>
+      <p>
+        Explore HS codes, capital estimates, and partner concentration to prioritise domestic manufacturing investments.
+      </p>
+    </section>
+    <main class="layout">
+      <aside class="panel filters">
+        <div class="status" id="status">Loading…</div>
+        <label for="search">Search</label>
+        <input id="search" type="text" placeholder="Search by HS code or title" />
+
         <label for="sectors">Sectors (comma separated)</label>
         <input id="sectors" type="text" placeholder="electronics,industrial" />
 
-        <label for="minCapex">Min Capex (USD)</label>
-        <input id="minCapex" type="number" min="0" step="1000" />
-
-        <label for="maxCapex">Max Capex (USD)</label>
-        <input id="maxCapex" type="number" min="0" step="1000" />
+        <div class="inline">
+          <div>
+            <label for="minCapex">Min Capex (USD)</label>
+            <input id="minCapex" type="number" min="0" step="1000" />
+          </div>
+          <div>
+            <label for="maxCapex">Max Capex (USD)</label>
+            <input id="maxCapex" type="number" min="0" step="1000" />
+          </div>
+        </div>
 
         <label for="sort">Sort by</label>
         <select id="sort">
-          <option value="opportunity">Opportunity Score</option>
+          <option value="opportunity">Opportunity score</option>
           <option value="progress">Reduction %</option>
-          <option value="value">Import Value</option>
+          <option value="value">Import value</option>
         </select>
 
         <button id="loadBtn">Load products</button>
-      </section>
-      <section class="panel">
+      </aside>
+
+      <section class="panel results">
         <div class="cards" id="cards"></div>
       </section>
-      <section class="panel" id="detail" style="grid-column: span 2">
-        <h2>Product detail</h2>
-        <p>Select a product to view recent imports and partners.</p>
-        <canvas id="chart" height="200"></canvas>
-        <div id="detailMeta" class="meta"></div>
+
+      <section class="panel detail">
+        <h2 id="detailTitle">Product detail</h2>
+        <p class="meta">Select a product to view import trends, partner concentration, and opportunity scores.</p>
+        <canvas id="chart" height="220"></canvas>
+        <div id="detailMeta"></div>
         <div id="partners"></div>
       </section>
     </main>
-    <script>
-      const cardsEl = document.getElementById('cards');
-      const chartCanvas = document.getElementById('chart');
-      const detailMeta = document.getElementById('detailMeta');
-      const partnersEl = document.getElementById('partners');
-      let chartInstance = null;
+    <footer>
+      <div>© Build for India</div>
+      <div>
+        <a href="https://github.com/VivekVardhanArrabelli/importdependencymap" target="_blank" rel="noopener">GitHub</a>
+        <a href="https://opencollective.com" target="_blank" rel="noopener">Donate</a>
+      </div>
+    </footer>
 
-      async function fetchProducts() {
-        const params = new URLSearchParams();
-        const sectors = document.getElementById('sectors').value.trim();
-        if (sectors) params.set('sectors', sectors);
-        const minCapex = document.getElementById('minCapex').value;
-        if (minCapex) params.set('min_capex', minCapex);
-        const maxCapex = document.getElementById('maxCapex').value;
-        if (maxCapex) params.set('max_capex', maxCapex);
-        const sort = document.getElementById('sort').value;
-        params.set('sort', sort);
-
-        const response = await fetch(`/api/products?${params.toString()}`);
-        if (!response.ok) {
-          console.error('Failed to load products');
-          return;
-        }
-        const data = await response.json();
-        renderCards(data.items || []);
-      }
-
-      function renderCards(items) {
-        cardsEl.innerHTML = '';
-        if (!items.length) {
-          cardsEl.innerHTML = '<p>No products found.</p>';
-          return;
-        }
-        items.forEach((item) => {
-          const card = document.createElement('div');
-          card.className = 'card';
-          card.innerHTML = `
-            <h3>${item.title} (${item.hs_code})</h3>
-            <div>${(item.sectors || []).map((s) => `<span class="chip">${s}</span>`).join('')}</div>
-            <p class="meta">Last 12m Imports: $${formatNumber(item.last_12m_value_usd)}</p>
-            <p class="meta">Opportunity Score: ${formatNumber(item.opportunity_score)}</p>
-          `;
-          card.addEventListener('click', () => loadDetail(item.hs_code));
-          cardsEl.appendChild(card);
-        });
-      }
-
-      async function loadDetail(hsCode) {
-        const response = await fetch(`/api/products/${hsCode}`);
-        if (!response.ok) {
-          console.error('Failed to load product detail');
-          return;
-        }
-        const data = await response.json();
-        const timeseries = data.timeseries || [];
-        const labels = timeseries.map((d) => `${d.year}-${String(d.month).padStart(2, '0')}`);
-        const values = timeseries.map((d) => d.value_usd || 0);
-        if (chartInstance) {
-          chartInstance.destroy();
-        }
-        chartInstance = new Chart(chartCanvas, {
-          type: 'line',
-          data: {
-            labels,
-            datasets: [
-              {
-                label: 'Monthly imports (USD)',
-                data: values,
-                borderColor: '#0a4d8c',
-                backgroundColor: 'rgba(10, 77, 140, 0.2)',
-                tension: 0.25,
-              },
-            ],
-          },
-          options: {
-            scales: {
-              y: {
-                beginAtZero: true,
-              },
-            },
-          },
-        });
-
-        detailMeta.innerHTML = `
-          <strong>${data.product.title}</strong> (${data.product.hs_code})<br />
-          Sectors: ${(data.product.sectors || []).join(', ') || 'n/a'}<br />
-          Baseline period: ${data.baseline_period || 'n/a'}<br />
-          Opportunity Score: ${formatNumber(data.progress?.opportunity_score)}
-        `;
-
-        partnersEl.innerHTML = '<h3>Top partners</h3>';
-        const list = document.createElement('ul');
-        (data.partners || []).forEach((p) => {
-          const li = document.createElement('li');
-          li.textContent = `${p.partner_country}: $${formatNumber(p.value_usd)}`;
-          list.appendChild(li);
-        });
-        partnersEl.appendChild(list);
-      }
-
-      function formatNumber(value) {
-        if (value === null || value === undefined) {
-          return '—';
-        }
-        return Number(value).toLocaleString('en-IN', { maximumFractionDigits: 2 });
-      }
-
-      document.getElementById('loadBtn').addEventListener('click', fetchProducts);
-      fetchProducts();
-    </script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="app.js"></script>
   </body>
 </html>
