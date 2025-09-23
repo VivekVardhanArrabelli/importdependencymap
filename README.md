@@ -10,6 +10,7 @@ Build for India helps identify domestic manufacturing opportunities by tracking 
   - `ADMIN_KEY` – bearer token for admin routes
   - `COMTRADE_BASE` (optional) – defaults to `https://comtradeapi.un.org/public/v1/preview`
   - `COMTRADE_FLOW` (default `import`), `COMTRADE_REPORTER` (default `India`), `COMTRADE_FREQ` (default `M`)
+  - `COMTRADE_REPORTER_CODE`, `COMTRADE_PARTNER`/`COMTRADE_PARTNER_CODE`, `COMTRADE_PATH` – optional overrides for API routing
   - `FX_RATES_FILE` – path to monthly USD→INR CSV (defaults to `data/fx_rates.csv`)
   - `DGCIS_DEFAULT_PATH` – optional default path for DGCI&S CSV exports (`data/dgcis_latest.csv`)
   - Optional observability keys: `SENTRY_DSN`, `GA_MEASUREMENT_ID`

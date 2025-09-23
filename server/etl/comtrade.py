@@ -44,9 +44,21 @@ def _base_url() -> str:
 
 
 
+def _resolve_endpoint() -> str:
+    """Return the fully qualified endpoint for Comtrade requests."""
+
+    base = _base_url().rstrip("/")
+    path = os.getenv("COMTRADE_PATH")
+    if path:
+        endpoint = parse.urljoin(base + "/", path.lstrip("/"))
+    else:
+        endpoint = parse.urljoin(base + "/", "v1/get/HS")
+    return endpoint
+
+
 def _request(params: Dict[str, str]) -> Dict:
     query = parse.urlencode(params)
-    url = f"{_base_url().rstrip('/')}/v1/get/HS?{query}"
+    url = f"{_resolve_endpoint()}?{query}"
     for attempt in range(1, MAX_RETRIES + 1):
         try:
             with request.urlopen(url, timeout=45) as resp:
@@ -67,6 +79,50 @@ def _request(params: Dict[str, str]) -> Dict:
                 raise
             time.sleep(min(2 ** attempt, 30))
     raise RuntimeError("Comtrade API request failed after retries")
+
+
+def _extract_dataset(payload: Dict) -> List[Dict]:
+    dataset = payload.get("dataset")
+    if isinstance(dataset, list):
+        return dataset
+    data = payload.get("data")
+    if isinstance(data, list):
+        return data
+    if isinstance(data, dict):
+        nested = data.get("dataset")
+        if isinstance(nested, list):
+            return nested
+    return []
+
+
+def _next_cursor(payload: Dict) -> Optional[str]:
+    links = payload.get("links") or {}
+    if isinstance(links, dict):
+        next_link = links.get("next")
+        if isinstance(next_link, dict):
+            next_link = next_link.get("href") or next_link.get("url")
+        if isinstance(next_link, str):
+            parsed = parse.urlparse(next_link)
+            if parsed.query:
+                query = dict(parse.parse_qsl(parsed.query))
+                cursor = query.get("cursor")
+                if cursor:
+                    return cursor
+            if next_link.startswith("cursor="):
+                return next_link.split("cursor=", 1)[1]
+            if next_link:
+                return next_link
+    meta = payload.get("meta")
+    if isinstance(meta, dict):
+        for key in ("next", "cursor"):
+            cursor = meta.get(key)
+            if isinstance(cursor, str) and cursor:
+                return cursor
+    for key in ("next", "cursor"):
+        cursor = payload.get(key)
+        if isinstance(cursor, str) and cursor:
+            return cursor
+    return None
 
 
 def _parse_dataset(dataset: Iterable[Dict]) -> List[Record]:
@@ -118,12 +174,18 @@ def fetch_range(
     reporter: Optional[str] = None,
     flow: Optional[str] = None,
     frequency: Optional[str] = None,
+    reporter_code: Optional[str] = None,
 ) -> List[Record]:
     reporter = reporter or os.getenv("COMTRADE_REPORTER", "India")
+    reporter_code_env = os.getenv("COMTRADE_REPORTER_CODE")
+    reporter_code = reporter_code or (reporter_code_env.strip() if reporter_code_env else "699")
     flow = flow or os.getenv("COMTRADE_FLOW", "import")
     frequency = frequency or os.getenv("COMTRADE_FREQ", "M")
+    partner = os.getenv("COMTRADE_PARTNER")
+    partner_code_env = os.getenv("COMTRADE_PARTNER_CODE")
+    partner_code = partner_code_env.strip() if partner_code_env else "0"
 
-    params = {
+    base_params = {
         "reporter": reporter,
         "flow": flow,
         "time_period": f"{from_period}:{to_period}",
@@ -131,8 +193,31 @@ def fetch_range(
         "type": "C",
         "classification": "HS",
     }
-    payload = _request(params)
-    dataset = payload.get("dataset") or []
+    if reporter_code:
+        base_params["reporterCode"] = reporter_code
+    if partner_code:
+        base_params["partnerCode"] = partner_code
+    elif partner:
+        base_params["partner"] = partner
+
+    dataset: List[Dict] = []
+    cursor: Optional[str] = None
+    while True:
+        params = dict(base_params)
+        if cursor:
+            params["cursor"] = cursor
+        payload = _request(params)
+
+        validation = payload.get("validation")
+        if isinstance(validation, dict) and validation.get("status", "").lower() == "error":
+            message = validation.get("message") or validation.get("description") or "Unknown validation error"
+            raise RuntimeError(f"Comtrade request rejected: {message}")
+
+        dataset.extend(_extract_dataset(payload))
+        cursor = _next_cursor(payload)
+        if not cursor:
+            break
+
     LOGGER.info("Fetched %s rows from Comtrade", len(dataset))
     return _parse_dataset(dataset)
 
@@ -156,21 +241,26 @@ def load(
                 capex_max=record.capex_max,
             )
             products_seen[record.hs_code] = True
+        fx_rate: Optional[float]
         try:
             fx_rate = forex.monthly_rate(record.year, record.month)
-        except RuntimeError as exc:
-            raise RuntimeError(
-                f"Missing FX rate for {record.year}-{record.month:02d} while processing {record.hs_code}"
-            ) from exc
+        except RuntimeError:
+            LOGGER.warning(
+                "Missing FX rate for %s %s-%02d; storing without INR conversion",
+                record.hs_code,
+                record.year,
+                record.month,
+            )
+            fx_rate = None
 
         value_usd = record.value_usd
         value_inr = record.value_inr
         if value_usd is None and value_inr is None:
             LOGGER.debug("Skipping record %s due to missing monetary values", record)
             continue
-        if value_inr is None and value_usd is not None:
+        if fx_rate is not None and value_inr is None and value_usd is not None:
             value_inr = value_usd * fx_rate
-        if value_usd is None and value_inr is not None:
+        if fx_rate is not None and value_usd is None and value_inr is not None:
             value_usd = value_inr / fx_rate
 
         db.insert_monthly(
