@@ -90,6 +90,7 @@ function buildQuery() {
   if (minCapex) params.set('min_capex', minCapex);
   if (maxCapex) params.set('max_capex', maxCapex);
   if (sort) params.set('sort', sort);
+  if (searchValue) params.set('q', searchValue);
   params.set('limit', 200);
 
   state.searchKeyword = searchValue.toLowerCase();
@@ -101,7 +102,8 @@ function filterProducts(items) {
   return items.filter((item) => {
     return (
       item.title?.toLowerCase().includes(state.searchKeyword) ||
-      item.hs_code?.toLowerCase().includes(state.searchKeyword)
+      item.hs_code?.toLowerCase().includes(state.searchKeyword) ||
+      item.description?.toLowerCase().includes(state.searchKeyword)
     );
   });
 }

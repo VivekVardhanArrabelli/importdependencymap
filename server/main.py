@@ -252,6 +252,7 @@ def list_products(
     max_capex: Optional[float] = Query(default=None, ge=0),
     sort: str = Query(default="opportunity"),
     limit: int = Query(default=100, ge=1, le=200),
+    q: Optional[str] = Query(default=None, alias="q", description="Search by HS code or title"),
 ) -> Dict[str, Any]:
     _require_database_url()
 
@@ -266,7 +267,7 @@ def list_products(
     order_clause = sort_map.get(sort.lower(), sort_map["opportunity"])
 
     query_parts = [
-        "SELECT p.hs_code, p.title, p.sectors, p.capex_min, p.capex_max,",
+        "SELECT p.hs_code, p.title, p.description, p.sectors, p.capex_min, p.capex_max,",
         "       ip.current_12m_usd, ip.reduction_pct, ip.opportunity_score, ip.last_updated",
         "FROM products p",
         "LEFT JOIN import_progress ip ON ip.hs_code = p.hs_code",
@@ -274,6 +275,11 @@ def list_products(
     params: List[Any] = []
     conditions: List[str] = []
 
+    search_term = (q or "").strip()
+    if search_term:
+        like = f"%{search_term}%"
+        conditions.append("(p.title ILIKE %s OR p.description ILIKE %s OR p.hs_code ILIKE %s)")
+        params.extend([like, like, like])
     if sectors:
         sector_list = [s.strip() for s in sectors.split(",") if s.strip()]
         if sector_list:
@@ -306,6 +312,7 @@ def list_products(
         item = {
             "hs_code": row["hs_code"],
             "title": row["title"],
+            "description": row.get("description"),
             "sectors": row.get("sectors") or [],
             "capex_min": float(row["capex_min"]) if row.get("capex_min") is not None else None,
             "capex_max": float(row["capex_max"]) if row.get("capex_max") is not None else None,
