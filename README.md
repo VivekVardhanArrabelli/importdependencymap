@@ -126,6 +126,8 @@ CREATE TABLE domestic_capability (
 );
 ```
 
+
+
 ### Opportunity Scoring
 ```
 OpportunityScore = Normalized(ImportValue) * (1 - SupplierConcentration) * TechFeasibilityScore * PolicySupportFactor
@@ -156,6 +158,27 @@ OpportunityScore = Normalized(ImportValue) * (1 - SupplierConcentration) * TechF
 4. Optionally create a nightly job to hit `/admin/etl/comtrade` and `/admin/recompute` (see workflow for reference).
 
 Seed or refresh data after deployment:
+
+=======
+
+The minimal client is in `client/index.html`. Open it via a lightweight static server (e.g. `python -m http.server`) that proxies API calls to your FastAPI instance.
+
+### Running without Postgres (CSV fallback)
+
+If you don't have a database handy, just omit `DATABASE_URL`. The API will serve product lists, detail, and leaderboard from `data/top100_hs.csv` and the client will load from `/` directly.
+
+## Railway deployment
+
+1. Create a new Railway project and add a Postgres plugin.
+2. Set `DATABASE_URL` to the Railway Postgres connection string and choose a secure `ADMIN_KEY`.
+3. Use the provided start command: `uvicorn server.main:app --host 0.0.0.0 --port $PORT`.
+4. Deploy.
+
+## Database seeding
+
+After deploying or running locally, trigger the seed job (replace host and admin key):
+
+
 ```bash
 curl -X POST \
   -H "Authorization: Bearer $ADMIN_KEY" \
