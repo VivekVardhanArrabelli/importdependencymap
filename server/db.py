@@ -76,6 +76,10 @@ def init_db(conn) -> None:
           ON monthly_imports (hs_code, year, month)
         """,
         """
+        CREATE UNIQUE INDEX IF NOT EXISTS uq_monthly_imports_hs_ym_partner
+          ON monthly_imports (hs_code, year, month, partner_country)
+        """,
+        """
         CREATE TABLE IF NOT EXISTS baseline_imports (
             hs_code TEXT PRIMARY KEY REFERENCES products(hs_code),
             baseline_12m_usd NUMERIC,
