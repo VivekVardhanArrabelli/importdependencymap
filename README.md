@@ -127,6 +127,7 @@ CREATE TABLE domestic_capability (
 ```
 
 
+
 ### Opportunity Scoring
 ```
 OpportunityScore = Normalized(ImportValue) * (1 - SupplierConcentration) * TechFeasibilityScore * PolicySupportFactor
@@ -157,6 +158,8 @@ OpportunityScore = Normalized(ImportValue) * (1 - SupplierConcentration) * TechF
 4. Optionally create a nightly job to hit `/admin/etl/comtrade` and `/admin/recompute` (see workflow for reference).
 
 Seed or refresh data after deployment:
+
+=======
 
 The minimal client is in `client/index.html`. Open it via a lightweight static server (e.g. `python -m http.server`) that proxies API calls to your FastAPI instance.
 
