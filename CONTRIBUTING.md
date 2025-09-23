@@ -6,7 +6,7 @@ We welcome contributions that improve data coverage, analytics, and user experie
 - Fork the repository and create a feature branch from `main` or the latest release branch.
 - Use Python 3.11 (or 3.10+) and create a virtual environment: `python -m venv .venv && source .venv/bin/activate`.
 - Install dependencies: `pip install -r requirements.txt`.
-- Copy `.env.example` to `.env` and fill in local `DATABASE_URL` and `ADMIN_KEY`. Leave optional keys empty if you are using CSV fallback only.
+- Copy `.env.example` to `.env` and fill in local `DATABASE_URL` and `ADMIN_KEY`.
 
 ## Development Workflow
 - Run the API with `uvicorn server.main:app --host 0.0.0.0 --port 8000`.
@@ -17,7 +17,7 @@ We welcome contributions that improve data coverage, analytics, and user experie
 - Keep code formatted with `black` and linted with `ruff` (optional but encouraged).
 
 ## Testing
-- Add unit tests under `tests/` using `pytest`. Name files `test_<module>.py` and cover both CSV fallback and Postgres paths when feasible.
+- Add unit tests under `tests/` using `pytest`. Name files `test_<module>.py` and cover both Postgres-backed flows and failure handling when feasible.
 - Run `pytest` (or `python -m unittest discover -s tests`) before submitting a PR.
 - Ensure `python -m compileall server` passes.
 

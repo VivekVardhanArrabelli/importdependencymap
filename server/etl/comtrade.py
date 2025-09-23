@@ -1,13 +1,11 @@
 """ETL pipeline for UN Comtrade monthly imports."""
 from __future__ import annotations
 
-import csv
 import json
 import logging
 import os
 import time
 from dataclasses import dataclass
-from pathlib import Path
 from typing import Dict, Iterable, List, Optional, Tuple
 from urllib import error, parse, request
 
@@ -19,7 +17,6 @@ LOGGER = logging.getLogger(__name__)
 DEFAULT_BASE = "https://comtradeapi.un.org/public/v1/preview"
 MAX_RETRIES = 4
 RETRY_STATUS = {429, 500, 502, 503, 504}
-DATA_FALLBACK = Path("data/top100_hs.csv")
 
 
 @dataclass
@@ -133,46 +130,6 @@ def fetch_range(
     return _parse_dataset(dataset)
 
 
-def _load_csv_fallback() -> List[Record]:
-    if not DATA_FALLBACK.exists():
-        return []
-    records: List[Record] = []
-    with DATA_FALLBACK.open("r", encoding="utf-8") as handle:
-        reader = csv.DictReader(handle)
-        for row in reader:
-            hs_code = normalize.canonical_hs_code(row.get("hs_code"))
-            if not hs_code:
-                continue
-            title = (row.get("title") or "").strip()
-            description = (row.get("description") or "").strip()
-            sectors = normalize.parse_csv_sectors(row.get("sectors", "")) or normalize.infer_sectors(title, description)
-            try:
-                capex_min = float(row.get("capex_min")) if row.get("capex_min") else None
-                capex_max = float(row.get("capex_max")) if row.get("capex_max") else None
-                seed_value = float(row.get("seed_month_value")) if row.get("seed_month_value") else None
-            except (ValueError, TypeError):
-                capex_min = capex_max = seed_value = None
-            partner = (row.get("top_country") or "").strip() or None
-            for month in range(1, 13):
-                records.append(
-                    Record(
-                        hs_code=hs_code,
-                        title=title or f"HS {hs_code}",
-                        description=description,
-                        sectors=sectors,
-                        capex_min=capex_min,
-                        capex_max=capex_max,
-                        year=2024,
-                        month=month,
-                        value_usd=normalize.ensure_usd(seed_value),
-                        qty=None,
-                        partner_country=partner,
-                    )
-                )
-    LOGGER.info("Loaded %s fallback rows from CSV", len(records))
-    return records
-
-
 def load(
     conn,
     records: Iterable[Record],
@@ -211,19 +168,13 @@ def run(
     from_period: str,
     to_period: str,
 ) -> Dict[str, object]:
-    try:
-        records = fetch_range(from_period, to_period)
-        source = "comtrade"
-    except Exception as exc:  # pragma: no cover - triggered in integration tests
-        LOGGER.warning("Falling back to CSV due to error: %s", exc)
-        records = _load_csv_fallback()
-        source = "csv_fallback"
+    records = fetch_range(from_period, to_period)
     if not records:
-        return {"products": 0, "monthly_rows": 0, "source": source}
+        raise RuntimeError("Comtrade returned no records for the requested range")
 
     products, monthly_rows = load(conn, records)
     return {
         "products": products,
         "monthly_rows": monthly_rows,
-        "source": source,
+        "source": "comtrade",
     }

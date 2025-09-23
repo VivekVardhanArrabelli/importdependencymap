@@ -1,6 +1,6 @@
 # Build for India
 
-Build for India helps identify domestic manufacturing opportunities by tracking imports, opportunity scores, and partner concentration for each HS code. The stack pairs a FastAPI backend, Postgres analytics tables, CSV fallbacks, and a lightweight static client served from the same origin.
+Build for India helps identify domestic manufacturing opportunities by tracking imports, opportunity scores, and partner concentration for each HS code. The stack pairs a FastAPI backend, Postgres analytics tables, and a lightweight static client served from the same origin.
 
 ## Requirements
 - Python 3.10+
@@ -32,11 +32,11 @@ export ADMIN_KEY=dev-secret
 ```
 These scripts call the protected admin endpoints, populating sample HS data from `data/top100_hs.csv` and recomputing baselines/opportunity scores.
 
-### Running without Postgres
-If `DATABASE_URL` is unset the API and client fall back to the CSV seed. You still get product listings, detail pages, and leaderboards without persistence.
+### Database Requirement
+`DATABASE_URL` must be configured. Admin endpoints and API queries fail fast when the database is unreachable to prevent serving stale placeholder data.
 
 ## ETL & Automation
-- `POST /admin/etl/comtrade?from=YYYY-MM&to=YYYY-MM` downloads monthly UN Comtrade data (HS6), upserts products/imports, and recomputes metrics with CSV fallback on failure.
+- `POST /admin/etl/comtrade?from=YYYY-MM&to=YYYY-MM` downloads monthly UN Comtrade data (HS6), upserts products/imports, and recomputes metrics.
 - `.github/workflows/ci.yml` installs dependencies, runs `python -m compileall server`, and executes tests.
 - `.github/workflows/nightly_etl.yml` triggers the Comtrade ETL and recompute every night at 03:00 UTC. Configure repository secrets `ADMIN_KEY` and `DEPLOY_URL`.
 

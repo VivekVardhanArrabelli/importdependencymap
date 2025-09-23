@@ -6,7 +6,7 @@ Score opportunities (replaceability) and show CAPEX/OPEX, machinery, tech needs,
 Track progress over time (import reduction, concentration shift) and guide focus to remaining high-impact items.
 Support search/filters (industry tags, investment budget).
 Provide open APIs and downloads; accept community submissions.
-Run reliably on Railway (FastAPI + Postgres). Seed data exists; live ETL from UN Comtrade (with fallback) + hooks for DGCI&S.
+Run reliably on Railway (FastAPI + Postgres). Seed data exists; live ETL from UN Comtrade (no CSV fallback) + hooks for DGCI&S.
 Runtime & Conventions
 Python 3.10+; FastAPI; psycopg2; SQL only (no ORM).
 Repo root contains requirements.txt and this file.
@@ -41,7 +41,7 @@ Target File Layout
   styles.css
   app.js
 /data
-  top100_hs.csv         # fallback seed (10–100 rows)
+  top100_hs.csv         # optional bootstrap seed (10–100 curated rows)
 /scripts
   seed_local.sh
   recompute_local.sh
@@ -137,8 +137,7 @@ Use COMTRADE_BASE, query HS6 monthly imports for India (reporter), parse:
 cmdCode (HS), rt3ISO (reporter, ignore), pt3ISO (partner), rgCode (flow), yr, period (month), TradeValue, NetWeight or quantity if available.
 Upsert products with HS title/description (if returned).
 Upsert monthly_imports.
-Handle 429/5xx with exponential backoff; partial writes allowed; log failures.
-Fallback: if API fails entirely, use /data/top100_hs.csv.
+Handle 429/5xx with exponential backoff; partial writes allowed; log failures and bubble errors — no CSV fallback.
 ETL — DGCI&S (etl/dgcis.py)
 Stub with function signatures + TODOs; leave hooks for authenticated CSV uploads later.
 API (FastAPI in server/main.py)
@@ -204,7 +203,7 @@ jobs:
 Repo secrets needed for workflow: ADMIN_KEY, DEPLOY_URL (your Railway URL).
 Tests (light)
 tests/test_health.py: /health 200.
-tests/test_seed_and_list.py: mock ADMIN_KEY → call /admin/seed (local) → /api/products non-empty → a detail returns series≥12.
+tests/test_seed_and_list.py: assert admin + read endpoints refuse to operate without DATABASE_URL (no silent fallback).
 tests/test_scoring.py: sanity on normalize_log, HHI, opportunity score monotonicity.
 Security & Governance
 Admin endpoints require exact Bearer match.
@@ -230,7 +229,7 @@ pydantic
 python-dotenv
 python-dateutil
 Create all files/directories above. Implement DB init and helper functions.
-Build ETL (Comtrade) with robust retry/backoff and fallback to /data/top100_hs.csv.
+Build ETL (Comtrade) with robust retry/backoff and fail-fast error handling (no CSV fallback).
 Implement jobs.py recompute functions, normalization, HHI, scoring.
 Implement all API routes (auth guard for admin).
 Build minimal client (index/search/cards/detail chart).
@@ -244,8 +243,8 @@ Seed command (curl with ADMIN_KEY)
 Public URLs to test: /health, /docs, /api/products, /api/products/<hs>
 Acceptance Criteria
 /health 200; /docs renders without 500.
-/admin/seed loads fallback CSV; /api/products returns non-empty.
-/admin/etl/comtrade succeeds (or falls back) and /admin/recompute writes import_progress.
+/admin/seed ingests curated CSV when invoked (requires DATABASE_URL).
+/admin/etl/comtrade succeeds and /admin/recompute writes import_progress.
 Leaderboard returns sorted items by chosen metric.
 Client loads, filters by sectors/capex, shows product page with chart.
 CI passes; Nightly job configured (won’t fail if secrets missing).

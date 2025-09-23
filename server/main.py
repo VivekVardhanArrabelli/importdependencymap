@@ -33,22 +33,8 @@ app.add_middleware(
 
 DATA_PATH = Path("data/top100_hs.csv")
 DEFAULT_SOURCE = "database"
-CSV_SOURCE = "csv_fallback"
 ADMIN_SOURCE = "admin"
 MANUAL_SOURCE = "manual"
-
-DEFAULT_SEED = """hs_code,title,description,sectors,capex_min,capex_max,seed_month_value,top_country
-850440,Static converters,Power converters,"{electronics}",50000,200000,120000,China
-840721,Reactors and vessels,Industrial pressure vessels,"{industrial}",70000,300000,80000,Germany
-854231,Integrated circuits,ICs general,"{electronics}",1000000,5000000,500000,China
-870323,Motor vehicles,Passenger vehicles,"{automotive}",2000000,8000000,1500000,Germany
-730799,Tube/pipe fittings,Steel fittings,"{metals}",25000,120000,45000,China
-841459,Industrial fans,Axial fans,"{industrial}",30000,200000,60000,Thailand
-848180,Valves (other),General-purpose valves,"{metals}",40000,250000,90000,China
-850760,Lithium-ion batteries,Rechargeable cells/packs,"{energy,electronics}",200000,1500000,300000,China
-902710,Gas/smoke analyzers,Environmental instruments,"{instruments}",60000,350000,70000,Japan
-940540,LED lamps,LED bulbs and lamps,"{electronics}",50000,300000,85000,Vietnam
-"""
 
 
 class AdminGuard:
@@ -69,21 +55,19 @@ class AdminGuard:
 admin_required = AdminGuard()
 
 
-def _database_available() -> bool:
-    return bool(os.getenv("DATABASE_URL"))
-
-
-def _ensure_seed_file() -> None:
-    DATA_PATH.parent.mkdir(parents=True, exist_ok=True)
-    if not DATA_PATH.exists():
-        DATA_PATH.write_text(DEFAULT_SEED, encoding="utf-8")
-        LOGGER.info("Seed CSV created at %s", DATA_PATH)
-
-
+def _require_database_url() -> str:
+    url = os.getenv("DATABASE_URL")
+    if not url:
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="DATABASE_URL not configured")
+    return url
 def _read_seed_rows() -> List[Dict[str, str]]:
-    _ensure_seed_file()
+    if not DATA_PATH.exists():
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"Seed CSV not found at {DATA_PATH}")
     with DATA_PATH.open("r", encoding="utf-8") as handle:
-        return list(csv.DictReader(handle))
+        rows = list(csv.DictReader(handle))
+    if not rows:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Seed CSV is empty")
+    return rows
 
 
 def _parse_csv_row(row: Dict[str, str]) -> Dict[str, Any]:
@@ -105,10 +89,8 @@ def _parse_csv_row(row: Dict[str, str]) -> Dict[str, Any]:
 
 @app.on_event("startup")
 def ensure_schema() -> None:
-    if not _database_available():
-        LOGGER.info("DATABASE_URL not configured; running in CSV-only mode")
-        return
     try:
+        _require_database_url()
         with db.connect() as conn:
             db.ensure_extensions(conn)
             db.init_db(conn)
@@ -132,17 +114,7 @@ def health() -> Dict[str, bool]:
 @app.post("/admin/seed")
 def seed_database(_: None = Depends(admin_required)) -> Dict[str, Any]:
     rows = [_parse_csv_row(row) for row in _read_seed_rows()]
-    if not rows:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Seed CSV is empty")
-
-    if not _database_available():
-        return {
-            "seeded": False,
-            "message": "DATABASE_URL not configured; CSV fallback only",
-            "items": len(rows),
-            "source": CSV_SOURCE,
-            "last_updated": datetime.now(timezone.utc).isoformat(),
-        }
+    _require_database_url()
 
     now_iso = datetime.now(timezone.utc).isoformat()
     with db.connect() as conn:
@@ -200,8 +172,7 @@ def trigger_comtrade(
     from_period: str = Query(..., alias="from", description="YYYY-MM inclusive start"),
     to_period: str = Query(..., alias="to", description="YYYY-MM inclusive end"),
 ) -> Dict[str, Any]:
-    if not _database_available():
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="DATABASE_URL not configured")
+    _require_database_url()
 
     start_key = _parse_period(from_period)
     end_key = _parse_period(to_period)
@@ -225,8 +196,7 @@ def trigger_comtrade(
 
 @app.post("/admin/recompute")
 def trigger_recompute(_: None = Depends(admin_required)) -> Dict[str, Any]:
-    if not _database_available():
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="DATABASE_URL not configured")
+    _require_database_url()
     with db.connect() as conn:
         baseline_summary = jobs.recompute_baseline(conn)
         progress_summary = jobs.recompute_progress(conn)
@@ -238,58 +208,6 @@ def trigger_recompute(_: None = Depends(admin_required)) -> Dict[str, Any]:
     }
 
 
-def _products_from_csv(
-    *,
-    sectors: Optional[str],
-    combine: str,
-    min_capex: Optional[float],
-    max_capex: Optional[float],
-    sort: str,
-    limit: int,
-) -> Dict[str, Any]:
-    rows = [_parse_csv_row(row) for row in _read_seed_rows()]
-    sector_list = [s.strip().lower() for s in sectors.split(",") if s.strip()] if sectors else []
-    combine = combine.upper()
-    items: List[Dict[str, Any]] = []
-    for row in rows:
-        row_sectors = [s.lower() for s in row["sectors"]]
-        if sector_list:
-            if combine == "AND":
-                if not all(s in row_sectors for s in sector_list):
-                    continue
-            else:
-                if not any(s in row_sectors for s in sector_list):
-                    continue
-        if min_capex is not None and row["capex_max"] is not None and row["capex_max"] < min_capex:
-            continue
-        if max_capex is not None and row["capex_min"] is not None and row["capex_min"] > max_capex:
-            continue
-        seed_value = row["seed_month_value"]
-        items.append(
-            {
-                "hs_code": row["hs_code"],
-                "title": row["title"],
-                "sectors": row["sectors"],
-                "capex_min": row["capex_min"],
-                "capex_max": row["capex_max"],
-                "last_12m_value_usd": (seed_value * 12) if seed_value else None,
-                "reduction_pct": None,
-                "opportunity_score": None,
-                "last_updated": None,
-            }
-        )
-
-    key = sort.lower()
-    if key == "value":
-        items.sort(key=lambda x: (x["last_12m_value_usd"] or 0), reverse=True)
-    elif key == "progress":
-        items.sort(key=lambda x: (x["reduction_pct"] or 0), reverse=True)
-    else:
-        items.sort(key=lambda x: (x["opportunity_score"] or 0), reverse=True)
-    items = items[:limit]
-    return {"items": items, "count": len(items), "source": CSV_SOURCE, "last_updated": None}
-
-
 @app.get("/api/products")
 def list_products(
     sectors: Optional[str] = Query(default=None, description="Comma-separated sectors"),
@@ -299,15 +217,7 @@ def list_products(
     sort: str = Query(default="opportunity"),
     limit: int = Query(default=100, ge=1, le=200),
 ) -> Dict[str, Any]:
-    if not _database_available():
-        return _products_from_csv(
-            sectors=sectors,
-            combine=combine,
-            min_capex=min_capex,
-            max_capex=max_capex,
-            sort=sort,
-            limit=limit,
-        )
+    _require_database_url()
 
     combine = combine.upper()
     if combine not in {"AND", "OR"}:
@@ -380,59 +290,9 @@ def list_products(
     }
 
 
-def _product_detail_from_csv(hs_code: str) -> Dict[str, Any]:
-    rows = [_parse_csv_row(row) for row in _read_seed_rows()]
-    row = next((item for item in rows if item["hs_code"] == hs_code), None)
-    if not row:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Product not found")
-    seed_value = row["seed_month_value"] or 0
-    product_card = ProductCard(
-        hs_code=row["hs_code"],
-        title=row["title"],
-        sectors=row["sectors"],
-        capex_min=row["capex_min"],
-        capex_max=row["capex_max"],
-        last_12m_value_usd=seed_value * 12 if seed_value else None,
-        reduction_pct=None,
-        opportunity_score=None,
-        last_updated=None,
-    )
-    timeseries = [
-        {
-            "year": 2024,
-            "month": month,
-            "value_usd": seed_value,
-            "qty": None,
-            "partner_country": row["top_country"],
-        }
-        for month in range(1, 13)
-    ]
-    return {
-        "product": product_card.model_dump(),
-        "description": row["description"],
-        "baseline_period": None,
-        "timeseries": timeseries,
-        "partners": [
-            {"partner_country": row["top_country"], "value_usd": seed_value * 12}
-        ],
-        "progress": {
-            "reduction_abs": None,
-            "reduction_pct": None,
-            "hhi_current": None,
-            "hhi_baseline": None,
-            "concentration_shift": None,
-            "opportunity_score": None,
-            "baseline_12m_usd": None,
-        },
-        "source": CSV_SOURCE,
-        "last_updated": None,
-    }
-
-
 @app.get("/api/products/{hs_code}")
 def product_detail(hs_code: str) -> Dict[str, Any]:
-    if not _database_available():
-        return _product_detail_from_csv(hs_code)
+    _require_database_url()
 
     with db.connect() as conn:
         with conn.cursor(cursor_factory=RealDictCursor) as cur:
@@ -526,16 +386,7 @@ def leaderboard(
     metric: str = Query(default="opportunity"),
     limit: int = Query(default=50, ge=1, le=200),
 ) -> Dict[str, Any]:
-    if not _database_available():
-        data = _products_from_csv(
-            sectors=None,
-            combine="OR",
-            min_capex=None,
-            max_capex=None,
-            sort=metric,
-            limit=limit,
-        )
-        return {"items": data["items"], "source": CSV_SOURCE, "last_updated": data.get("last_updated")}
+    _require_database_url()
 
     sort_map = {
         "opportunity": "COALESCE(ip.opportunity_score, 0) DESC",
@@ -583,8 +434,7 @@ def upsert_domestic_capability(
     payload: DomesticCapabilityPayload,
     _: None = Depends(admin_required),
 ) -> Dict[str, Any]:
-    if not _database_available():
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="DATABASE_URL not configured")
+    _require_database_url()
     with db.connect() as conn:
         record_id = db.upsert_domestic_capability(
             conn,
@@ -606,8 +456,7 @@ def upsert_domestic_capability(
 
 @app.get("/api/domestic_capability/{hs_code}")
 def list_domestic_capability(hs_code: str) -> Dict[str, Any]:
-    if not _database_available():
-        return {"items": [], "source": CSV_SOURCE, "last_updated": None}
+    _require_database_url()
     with db.connect() as conn:
         rows = db.fetch_verified_capability(conn, hs_code)
     items: List[Dict[str, Any]] = []
