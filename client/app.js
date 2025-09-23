@@ -29,8 +29,11 @@ document.addEventListener('DOMContentLoaded', () => {
   wireEvents();
   loadProducts();
   renderCommunity();
+
   hydrateFiltersFromStorage();
   document.addEventListener('keydown', handleHotkeys);
+
+
 });
 
 function wireEvents() {
@@ -41,23 +44,29 @@ function wireEvents() {
   document.getElementById('compareForm').addEventListener('submit', handleCompareSubmit);
   document.getElementById('communityForm').addEventListener('submit', handleCommunitySubmit);
   document.getElementById('search').addEventListener('input', () => renderCards(filterProducts(state.products)));
+
   document.getElementById('loadBtn').addEventListener('click', persistFiltersToStorage);
+
 }
 
 async function loadProducts(force = false) {
   try {
+
     setStatus('Loading products…', true);
     renderSkeletonCards();
+
     const params = buildQuery();
     const response = await fetch(`/api/products?${params.toString()}`);
     if (!response.ok) throw new Error(`Request failed: ${response.status}`);
     const data = await response.json();
     state.products = data.items || [];
+
     state.lastFetched = data.last_updated || null;
     renderStats(state.products);
     renderCards(state.products);
     renderAlerts(state.products);
     populateCompareOptions(state.products);
+
     setStatus(`Source: ${data.source ?? '—'} • Updated ${state.lastFetched ?? '—'}`);
     animateCounters();
     showToast(`Loaded ${state.products.length} items`);
@@ -65,6 +74,7 @@ async function loadProducts(force = false) {
     console.error(error);
     setStatus('Unable to load products — check API status.');
     showToast('Load failed. Check API status.', 'error');
+
   }
 }
 
@@ -132,6 +142,7 @@ function renderCards(items) {
       <div class="meta">12m imports: ${formatValue(item.last_12m_value_usd, 'usd')}</div>
       <div class="meta">Opportunity score: ${(item.opportunity_score ?? 0).toFixed(2)}</div>
       <div class="meta">YoY change: ${formatPercentage(item.reduction_pct)}</div>
+
       <div>
         <button class="btn outline" type="button" data-watch="${item.hs_code}">Watch</button>
       </div>
@@ -146,10 +157,12 @@ function renderCards(items) {
         loadDetail(item.hs_code);
       }
     });
+
     container.appendChild(card);
   });
 
   document.getElementById('resultsMeta').textContent = `${filtered.length} items shown`;
+
 
   container.querySelectorAll('button[data-watch]').forEach((btn) => {
     btn.addEventListener('click', (e) => {
@@ -161,6 +174,7 @@ function renderCards(items) {
       });
     });
   });
+
 }
 
 async function loadDetail(hsCode) {
@@ -180,8 +194,10 @@ async function loadDetail(hsCode) {
 function updateDetail(detail) {
   const product = detail.product;
   document.getElementById('detailTitle').textContent = `${product.title} (${product.hs_code})`;
+
   document.getElementById('detailTitle').focus();
   document.getElementById('detail').scrollIntoView({ behavior: 'smooth', block: 'start' });
+
 
   const snapshot = document.getElementById('detailSnapshot');
   snapshot.innerHTML = `
@@ -213,16 +229,20 @@ function renderTrendChart(timeseries = []) {
         {
           label: 'Monthly imports (USD)',
           data: usdValues,
+
           borderColor: '#f97316',
           backgroundColor: 'rgba(249, 115, 22, 0.18)',
+
           tension: 0.3,
           fill: true,
         },
         {
           label: 'Monthly imports (INR)',
           data: inrValues,
+
           borderColor: '#16a34a',
           backgroundColor: 'rgba(22, 163, 74, 0.18)',
+
           tension: 0.25,
           fill: true,
         },
@@ -251,7 +271,9 @@ function renderPartnerChart(partners = []) {
       datasets: [
         {
           data: values,
+
           backgroundColor: ['#2563eb', '#16a34a', '#f97316', '#0ea5e9', '#64748b'],
+
         },
       ],
     },
@@ -519,6 +541,7 @@ function downloadCsv() {
   URL.revokeObjectURL(url);
 }
 
+
 function setStatus(message, busy = false) {
   const el = document.getElementById('status');
   el.textContent = message;
@@ -605,6 +628,7 @@ function hydrateFiltersFromStorage() {
   document.getElementById('minCapex').value = saved.minCapex || '';
   document.getElementById('maxCapex').value = saved.maxCapex || '';
   document.getElementById('sort').value = saved.sort || 'opportunity';
+
 }
 
 function formatValue(value, mode = 'usd') {
@@ -648,4 +672,6 @@ function restoreJSON(key, fallback) {
     console.warn(`Failed to parse ${key} from localStorage`, error);
     return fallback;
   }
+
 }
+

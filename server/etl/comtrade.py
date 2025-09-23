@@ -14,6 +14,7 @@ from . import normalize
 
 LOGGER = logging.getLogger(__name__)
 
+
 MAX_RETRIES = 4
 RETRY_STATUS = {429, 500, 502, 503, 504}
 
@@ -35,10 +36,12 @@ class Record:
 
 
 def _base_url() -> str:
+
     base = os.getenv("COMTRADE_BASE")
     if not base:
         raise RuntimeError("COMTRADE_BASE environment variable is required")
     return base
+
 
 
 def _request(params: Dict[str, str]) -> Dict:

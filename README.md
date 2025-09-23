@@ -124,7 +124,39 @@ CREATE TABLE domestic_capability (
   verified BOOLEAN DEFAULT false,
   created_at timestamptz DEFAULT now()
 );
+
+
+
 ```
+- `Normalized(ImportValue)`: log1p of the rolling 12-month USD import, min–max scaled (`server/util.py::norm_log`).
+- `SupplierConcentration`: Herfindahl index of partner-country shares, using `1 - HHI` to reward diversified imports (`server/util.py::hhi_from_shares`).
+- `TechFeasibilityScore`: heuristic per sector (`server/util.py::tech_feasibility_for`), to be refined with granular tags/ML in future.
+- `PolicySupportFactor`: defaults to `1.0`; elevate to `>1.0` when PLI/Make-in-India incentives apply (via WITS/policy data).
+
+## Product Vision (MVP)
+- **Home dashboard** highlighting top imported items by value, trending surges, and a map of source-country dependence.
+- **HS search & detail** surfaces monthly import charts, top partners, tariffs/policy flags, opportunity scores, CAPEX/OPEX ranges, required machinery, skill tiers, and localisation guidance.
+- **Business case generator** estimates revenue, payback, and break-even given factory size, price, and import-replacement assumptions.
+- **Compare view** juxtaposes HS items or supplier countries for strategy decisions.
+- **Alerts & watchlist** trigger when YoY import growth spikes or single-country dependence exceeds thresholds.
+- **Community registry** for machine vendors, tooling suppliers, and contract manufacturers (crowdsourced + verified).
+- **APIs & downloads** provide CSV/JSON exports per HS item. Current REST endpoints ship today; richer download tooling is planned.
+
+## Testing
+- Add tests under `tests/` using `pytest` (fallback to `python -m unittest discover`).
+- Run `pytest` locally before opening a PR.
+- Ensure `python -m compileall server` passes to catch syntax issues.
+
+## Deployment (Railway)
+1. Provision a Railway service with Postgres.
+2. Set environment variables above in **Project → Variables**.
+3. Use the start command: `uvicorn server.main:app --host 0.0.0.0 --port $PORT`.
+4. Optionally create a nightly job to hit `/admin/etl/comtrade` and `/admin/recompute` (see workflow for reference).
+
+Seed or refresh data after deployment:
+
+=======
+
 
 ### Opportunity Scoring
 ```
@@ -156,6 +188,7 @@ OpportunityScore = Normalized(ImportValue) * (1 - SupplierConcentration) * TechF
 4. Optionally create a nightly job to hit `/admin/etl/comtrade` and `/admin/recompute` (see workflow for reference).
 
 Seed or refresh data after deployment:
+
 ```bash
 curl -X POST \
   -H "Authorization: Bearer $ADMIN_KEY" \
