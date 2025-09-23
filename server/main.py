@@ -15,7 +15,7 @@ from fastapi.responses import FileResponse, HTMLResponse
 from psycopg2.extras import RealDictCursor
 
 from . import db, jobs
-from .etl import comtrade, normalize
+from .etl import comtrade, dgcis, normalize
 from .schemas import DomesticCapabilityPayload, ProductCard
 
 load_dotenv()
@@ -139,6 +139,8 @@ def seed_database(_: None = Depends(admin_required)) -> Dict[str, Any]:
                     year=datetime.now(timezone.utc).year,
                     month=month,
                     value_usd=normalize.ensure_usd(row["seed_month_value"]),
+                    value_inr=None,
+                    fx_rate=None,
                     qty=None,
                     partner=row["top_country"],
                 )
@@ -185,6 +187,37 @@ def trigger_comtrade(
         progress_summary = jobs.recompute_progress(conn)
 
         summary.update(
+        {
+            "baseline": baseline_summary,
+            "progress": progress_summary,
+            "last_updated": datetime.now(timezone.utc).isoformat(),
+        }
+    )
+    return summary
+
+
+@app.post("/admin/etl/dgcis")
+def trigger_dgcis(
+    _: None = Depends(admin_required),
+    file_path: Optional[str] = Query(
+        default=None,
+        description="Path to DGCI&S CSV export (defaults to data/dgcis_latest.csv)",
+    ),
+) -> Dict[str, Any]:
+    _require_database_url()
+    source = Path(file_path or os.getenv("DGCIS_DEFAULT_PATH", "data/dgcis_latest.csv"))
+    if not source.exists():
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"DGCI&S file not found at {source}",
+        )
+
+    with db.connect() as conn:
+        summary = dgcis.run(conn, source=source)
+        baseline_summary = jobs.recompute_baseline(conn)
+        progress_summary = jobs.recompute_progress(conn)
+
+    summary.update(
         {
             "baseline": baseline_summary,
             "progress": progress_summary,
@@ -345,6 +378,8 @@ def product_detail(hs_code: str) -> Dict[str, Any]:
             "year": entry["year"],
             "month": entry["month"],
             "value_usd": float(entry["value_usd"]) if entry.get("value_usd") is not None else None,
+            "value_inr": float(entry["value_inr"]) if entry.get("value_inr") is not None else None,
+            "fx_rate": float(entry["fx_rate"]) if entry.get("fx_rate") is not None else None,
             "qty": float(entry["qty"]) if entry.get("qty") is not None else None,
             "partner_country": entry.get("partner_country"),
         }

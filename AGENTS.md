@@ -119,7 +119,7 @@ Core Logic
 Normalization (etl/normalize.py)
 HS canonicalization: normalize to HS6 (string, zero-pad/truncate).
 Sectors mapping: map keywords to sectors list (heuristics).
-Currency: values assumed USD; store as provided.
+Currency: store both USD and INR values per month; require FX rates (USD→INR) via `data/fx_rates.csv` or `FX_RATES_FILE`.
 Progress & Scoring (jobs.py)
 Rolling sums: last 12m per HS.
 Baseline: choose earliest contiguous 12m window with data; otherwise last full calendar year; store in baseline_imports.
@@ -139,7 +139,7 @@ Upsert products with HS title/description (if returned).
 Upsert monthly_imports.
 Handle 429/5xx with exponential backoff; partial writes allowed; log failures and bubble errors — no CSV fallback.
 ETL — DGCI&S (etl/dgcis.py)
-Stub with function signatures + TODOs; leave hooks for authenticated CSV uploads later.
+`POST /admin/etl/dgcis?file_path=` ingests Tradestat CSV exports (HS, INR/USD, partner countries). Requires FX table for conversion.
 API (FastAPI in server/main.py)
 Add CORS *. All admin routes require header Authorization: Bearer <ADMIN_KEY>.
 Public
@@ -177,6 +177,12 @@ set -e
 : "${ADMIN_KEY:?Missing ADMIN_KEY}"
 URL=${1:-http://localhost:8000}
 curl -X POST -H "Authorization: Bearer $ADMIN_KEY" $URL/admin/recompute
+load_dgcis.sh
+set -e
+: "${ADMIN_KEY:?Missing ADMIN_KEY}"
+FILE=${1:-data/dgcis_latest.csv}
+URL=${2:-http://localhost:8000}
+curl -X POST -H "Authorization: Bearer $ADMIN_KEY" "$URL/admin/etl/dgcis?file_path=$FILE"
 CI & Nightly ETL
 .github/workflows/ci.yml
 Python setup, pip install -r requirements.txt
@@ -205,6 +211,8 @@ Tests (light)
 tests/test_health.py: /health 200.
 tests/test_seed_and_list.py: assert admin + read endpoints refuse to operate without DATABASE_URL (no silent fallback).
 tests/test_scoring.py: sanity on normalize_log, HHI, opportunity score monotonicity.
+tests/test_forex.py: FX rate lookup from `FX_RATES_FILE`.
+tests/test_dgcis.py: CSV ingestion/parsing, DB upserts mocked.
 Security & Governance
 Admin endpoints require exact Bearer match.
 Validate CSV lines; cap request sizes.
@@ -214,7 +222,6 @@ Future: moderation flow for domestic_capability (verified flag).
 Donations
 In README.md add sections for GitHub Sponsors / OpenCollective (links left as TODO).
 Roadmap (post-V1)
-DGCI&S authenticated ETL.
 Policy flags (PLI, duties) + PolicySupport uplift > 1.0.
 BOM/sub-items table; supplier registry; per-state incentives.
 Export CSV/JSON endpoints; API keys & rate limits.

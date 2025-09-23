@@ -64,6 +64,8 @@ def init_db(conn) -> None:
             year INT NOT NULL,
             month INT NOT NULL,
             value_usd NUMERIC,
+            value_inr NUMERIC,
+            fx_rate NUMERIC,
             qty NUMERIC,
             partner_country TEXT,
             created_at timestamptz DEFAULT now()
@@ -113,6 +115,12 @@ def init_db(conn) -> None:
     with conn.cursor() as cur:
         for statement in statements:
             cur.execute(statement)
+        cur.execute(
+            "ALTER TABLE monthly_imports ADD COLUMN IF NOT EXISTS value_inr NUMERIC"
+        )
+        cur.execute(
+            "ALTER TABLE monthly_imports ADD COLUMN IF NOT EXISTS fx_rate NUMERIC"
+        )
     LOGGER.info("Database schema ensured")
 
 
@@ -150,6 +158,8 @@ def insert_monthly(
     year: int,
     month: int,
     value_usd,
+    value_inr,
+    fx_rate,
     qty,
     partner: Optional[str],
 ) -> None:
@@ -157,18 +167,23 @@ def insert_monthly(
         cur.execute(
             """
             INSERT INTO monthly_imports (
-                hs_code, year, month, value_usd, qty, partner_country
+                hs_code, year, month, value_usd, value_inr, fx_rate, qty, partner_country
             )
-            VALUES (%s, %s, %s, %s, %s, %s)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
             ON CONFLICT (hs_code, year, month, partner_country) DO UPDATE
                 SET value_usd = EXCLUDED.value_usd,
+                    value_inr = EXCLUDED.value_inr,
+                    fx_rate = EXCLUDED.fx_rate,
                     qty = EXCLUDED.qty
             """,
-            (hs_code, year, month, value_usd, qty, partner),
+            (hs_code, year, month, value_usd, value_inr, fx_rate, qty, partner),
         )
 
 
-def bulk_insert_monthly(conn, rows: Iterable[Tuple[str, int, int, float, Optional[float], Optional[str]]]) -> int:
+def bulk_insert_monthly(
+    conn,
+    rows: Iterable[Tuple[str, int, int, float, Optional[float], Optional[float], Optional[str]]],
+) -> int:
     """Insert many monthly rows with upsert semantics."""
 
     rows = list(rows)
@@ -178,10 +193,12 @@ def bulk_insert_monthly(conn, rows: Iterable[Tuple[str, int, int, float, Optiona
         execute_values(
             cur,
             """
-            INSERT INTO monthly_imports (hs_code, year, month, value_usd, qty, partner_country)
+            INSERT INTO monthly_imports (hs_code, year, month, value_usd, value_inr, fx_rate, qty, partner_country)
             VALUES %s
             ON CONFLICT (hs_code, year, month, partner_country) DO UPDATE
               SET value_usd = EXCLUDED.value_usd,
+                  value_inr = EXCLUDED.value_inr,
+                  fx_rate = EXCLUDED.fx_rate,
                   qty = EXCLUDED.qty
             """,
             rows,
@@ -260,7 +277,7 @@ def fetch_last_36m(conn, hs_code: str) -> List[Dict]:
     with conn.cursor(cursor_factory=RealDictCursor) as cur:
         cur.execute(
             """
-            SELECT year, month, value_usd, qty, partner_country
+            SELECT year, month, value_usd, value_inr, fx_rate, qty, partner_country
             FROM monthly_imports
             WHERE hs_code = %s
             ORDER BY year DESC, month DESC

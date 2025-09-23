@@ -9,7 +9,7 @@ from dataclasses import dataclass
 from typing import Dict, Iterable, List, Optional, Tuple
 from urllib import error, parse, request
 
-from .. import db
+from .. import db, forex
 from . import normalize
 
 LOGGER = logging.getLogger(__name__)
@@ -30,8 +30,9 @@ class Record:
     year: int
     month: int
     value_usd: Optional[float]
-    qty: Optional[float]
-    partner_country: Optional[str]
+    value_inr: Optional[float] = None
+    qty: Optional[float] = None
+    partner_country: Optional[str] = None
 
 
 def _base_url() -> str:
@@ -97,6 +98,7 @@ def _parse_dataset(dataset: Iterable[Dict]) -> List[Record]:
                 year=year,
                 month=month,
                 value_usd=normalize.ensure_usd(value_usd),
+                value_inr=None,
                 qty=qty,
                 partner_country=partner,
             )
@@ -149,12 +151,31 @@ def load(
                 capex_max=record.capex_max,
             )
             products_seen[record.hs_code] = True
+        try:
+            fx_rate = forex.monthly_rate(record.year, record.month)
+        except RuntimeError as exc:
+            raise RuntimeError(
+                f"Missing FX rate for {record.year}-{record.month:02d} while processing {record.hs_code}"
+            ) from exc
+
+        value_usd = record.value_usd
+        value_inr = record.value_inr
+        if value_usd is None and value_inr is None:
+            LOGGER.debug("Skipping record %s due to missing monetary values", record)
+            continue
+        if value_inr is None and value_usd is not None:
+            value_inr = value_usd * fx_rate
+        if value_usd is None and value_inr is not None:
+            value_usd = value_inr / fx_rate
+
         db.insert_monthly(
             conn,
             hs_code=record.hs_code,
             year=record.year,
             month=record.month,
-            value_usd=record.value_usd,
+            value_usd=value_usd,
+            value_inr=value_inr,
+            fx_rate=fx_rate,
             qty=record.qty,
             partner=record.partner_country,
         )

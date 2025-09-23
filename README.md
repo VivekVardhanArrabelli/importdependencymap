@@ -10,6 +10,8 @@ Build for India helps identify domestic manufacturing opportunities by tracking 
   - `ADMIN_KEY` – bearer token for admin routes
   - `COMTRADE_BASE` (optional) – defaults to `https://comtradeapi.un.org/public/v1/preview`
   - `COMTRADE_FLOW` (default `import`), `COMTRADE_REPORTER` (default `India`), `COMTRADE_FREQ` (default `M`)
+  - `FX_RATES_FILE` – path to monthly USD→INR CSV (defaults to `data/fx_rates.csv`)
+  - `DGCIS_DEFAULT_PATH` – optional default path for DGCI&S CSV exports (`data/dgcis_latest.csv`)
   - Optional observability keys: `SENTRY_DSN`, `GA_MEASUREMENT_ID`
 
 Copy `.env.example`, fill the values, and never commit live secrets.
@@ -29,8 +31,9 @@ The API serves the static client at `/` when `client/` exists. Alternatively run
 export ADMIN_KEY=dev-secret
 ./scripts/seed_local.sh http://localhost:8000
 ./scripts/recompute_local.sh http://localhost:8000
+./scripts/load_dgcis.sh data/dgcis_sample.csv http://localhost:8000
 ```
-These scripts call the protected admin endpoints, populating sample HS data from `data/top100_hs.csv` and recomputing baselines/opportunity scores.
+These scripts call the protected admin endpoints, populating sample HS data from `data/top100_hs.csv`, ingesting DGCI&S CSV exports, and recomputing baselines/opportunity scores.
 
 ### Database Requirement
 `DATABASE_URL` must be configured. Admin endpoints and API queries fail fast when the database is unreachable to prevent serving stale placeholder data.
@@ -47,7 +50,7 @@ These scripts call the protected admin endpoints, populating sample HS data from
 
 ## ETL & Automation
 - `POST /admin/etl/comtrade?from=YYYY-MM&to=YYYY-MM` downloads monthly UN Comtrade data (HS6), upserts products/imports, and recomputes metrics.
-- `server/etl/dgcis.py` is a stub reserved for authenticated DGCI&S ingestion; no data is loaded from it yet.
+- `POST /admin/etl/dgcis?file_path=...` ingests DGCI&S CSV exports (USD/INR values, partner mix) and recomputes analytics.
 - `.github/workflows/ci.yml` installs dependencies, runs `python -m compileall server`, and executes tests.
 - `.github/workflows/nightly_etl.yml` triggers the Comtrade ETL and recompute every night at 03:00 UTC. Configure repository secrets `ADMIN_KEY` and `DEPLOY_URL`.
 
@@ -163,6 +166,7 @@ curl -X POST \
 - `GET /health`
 - `POST /admin/seed`
 - `POST /admin/etl/comtrade`
+- `POST /admin/etl/dgcis`
 - `POST /admin/recompute`
 - `GET /api/products`
 - `GET /api/products/{hs}`

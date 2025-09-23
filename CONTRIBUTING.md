@@ -14,6 +14,7 @@ We welcome contributions that improve data coverage, analytics, and user experie
 - Use the helper scripts:
   - Seed data: `./scripts/seed_local.sh http://localhost:8000`
   - Recompute metrics: `./scripts/recompute_local.sh http://localhost:8000`
+  - Load DGCI&S CSV exports: `./scripts/load_dgcis.sh path/to/export.csv http://localhost:8000`
 - Keep code formatted with `black` and linted with `ruff` (optional but encouraged).
 
 ## Testing
