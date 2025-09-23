@@ -13,6 +13,9 @@
     <link rel="stylesheet" href="styles.css" />
   </head>
   <body>
+
+    <a class="skip-link" href="#dashboard">Skip to content</a>
+
     <header class="topbar">
       <div class="brand">
         <span class="brand__logo">🇮🇳</span>
@@ -21,7 +24,9 @@
           <small>Import Dependency Intelligence</small>
         </span>
       </div>
-      <nav>
+
+      <nav aria-label="Primary">
+
         <a href="#dashboard">Dashboard</a>
         <a href="#detail">Product Detail</a>
         <a href="#business-case">Business Case</a>
@@ -66,7 +71,8 @@
       <section class="layout__filters">
         <aside class="panel filters" aria-labelledby="filtersTitle">
           <h2 id="filtersTitle">Filter &amp; Search</h2>
-          <div class="status" id="status">Loading…</div>
+
+          <div class="status" id="status" role="status" aria-live="polite" aria-busy="false">Loading…</div>
 
           <label for="search">Search</label>
           <input id="search" type="text" placeholder="HS code or title" />
@@ -115,7 +121,7 @@
       <section class="panel detail" id="detail" aria-labelledby="detailTitle">
         <div class="detail__header">
           <div>
-            <h2 id="detailTitle">Select a product to explore details</h2>
+            <h2 id="detailTitle" tabindex="-1">Select a product to explore details</h2>
             <p class="meta">
               Opportunity score, partner distribution, CAPEX estimates, and localisation effort breakdown.
             </p>
@@ -188,6 +194,7 @@
         <div id="compareResults" class="compare-results"></div>
       </section>
 
+
       <section class="panel" id="watchlist" aria-labelledby="watchlistTitle">
         <h2 id="watchlistTitle">Watchlist</h2>
         <p class="meta">Monitor high-priority items. Stored locally in your browser.</p>
@@ -251,6 +258,10 @@
         <a href="https://comtradeapi.un.org" target="_blank" rel="noopener">UN Comtrade</a>
       </div>
     </footer>
+
+
+    <div id="toast" class="toast" role="status" aria-live="polite" aria-atomic="true" hidden></div>
+
 
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <script src="app.js"></script>

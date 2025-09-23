@@ -29,6 +29,11 @@ document.addEventListener('DOMContentLoaded', () => {
   wireEvents();
   loadProducts();
   renderCommunity();
+
+  hydrateFiltersFromStorage();
+  document.addEventListener('keydown', handleHotkeys);
+
+
 });
 
 function wireEvents() {
@@ -39,25 +44,37 @@ function wireEvents() {
   document.getElementById('compareForm').addEventListener('submit', handleCompareSubmit);
   document.getElementById('communityForm').addEventListener('submit', handleCommunitySubmit);
   document.getElementById('search').addEventListener('input', () => renderCards(filterProducts(state.products)));
+
+  document.getElementById('loadBtn').addEventListener('click', persistFiltersToStorage);
+
 }
 
 async function loadProducts(force = false) {
   try {
-    setStatus('Loading products…');
+
+    setStatus('Loading products…', true);
+    renderSkeletonCards();
+
     const params = buildQuery();
     const response = await fetch(`/api/products?${params.toString()}`);
     if (!response.ok) throw new Error(`Request failed: ${response.status}`);
     const data = await response.json();
     state.products = data.items || [];
-    state.lastFetched = data.last_updated || new Date().toISOString();
+
+    state.lastFetched = data.last_updated || null;
     renderStats(state.products);
     renderCards(state.products);
     renderAlerts(state.products);
     populateCompareOptions(state.products);
-    setStatus(`Source: ${data.source || 'live'} • Updated ${state.lastFetched}`);
+
+    setStatus(`Source: ${data.source ?? '—'} • Updated ${state.lastFetched ?? '—'}`);
+    animateCounters();
+    showToast(`Loaded ${state.products.length} items`);
   } catch (error) {
     console.error(error);
     setStatus('Unable to load products — check API status.');
+    showToast('Load failed. Check API status.', 'error');
+
   }
 }
 
@@ -125,12 +142,39 @@ function renderCards(items) {
       <div class="meta">12m imports: ${formatValue(item.last_12m_value_usd, 'usd')}</div>
       <div class="meta">Opportunity score: ${(item.opportunity_score ?? 0).toFixed(2)}</div>
       <div class="meta">YoY change: ${formatPercentage(item.reduction_pct)}</div>
+
+      <div>
+        <button class="btn outline" type="button" data-watch="${item.hs_code}">Watch</button>
+      </div>
     `;
+    card.tabIndex = 0;
+    card.setAttribute('role', 'button');
+    card.setAttribute('aria-label', `${item.title} ${item.hs_code}`);
     card.addEventListener('click', () => loadDetail(item.hs_code));
+    card.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' || e.key === ' ') {
+        e.preventDefault();
+        loadDetail(item.hs_code);
+      }
+    });
+
     container.appendChild(card);
   });
 
   document.getElementById('resultsMeta').textContent = `${filtered.length} items shown`;
+
+
+  container.querySelectorAll('button[data-watch]').forEach((btn) => {
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const hs = btn.getAttribute('data-watch');
+      fetch(`/api/products/${hs}`).then((res) => res.json()).then((detail) => {
+        addToWatchlist(detail);
+        showToast(`Added ${detail.product.title} to watchlist`);
+      });
+    });
+  });
+
 }
 
 async function loadDetail(hsCode) {
@@ -150,6 +194,10 @@ async function loadDetail(hsCode) {
 function updateDetail(detail) {
   const product = detail.product;
   document.getElementById('detailTitle').textContent = `${product.title} (${product.hs_code})`;
+
+  document.getElementById('detailTitle').focus();
+  document.getElementById('detail').scrollIntoView({ behavior: 'smooth', block: 'start' });
+
 
   const snapshot = document.getElementById('detailSnapshot');
   snapshot.innerHTML = `
@@ -181,16 +229,20 @@ function renderTrendChart(timeseries = []) {
         {
           label: 'Monthly imports (USD)',
           data: usdValues,
-          borderColor: '#1d4ed8',
-          backgroundColor: 'rgba(29, 78, 216, 0.18)',
+
+          borderColor: '#f97316',
+          backgroundColor: 'rgba(249, 115, 22, 0.18)',
+
           tension: 0.3,
           fill: true,
         },
         {
           label: 'Monthly imports (INR)',
           data: inrValues,
-          borderColor: '#14b8a6',
-          backgroundColor: 'rgba(20, 184, 166, 0.18)',
+
+          borderColor: '#16a34a',
+          backgroundColor: 'rgba(22, 163, 74, 0.18)',
+
           tension: 0.25,
           fill: true,
         },
@@ -219,7 +271,9 @@ function renderPartnerChart(partners = []) {
       datasets: [
         {
           data: values,
-          backgroundColor: ['#1d4ed8', '#0ea5e9', '#6366f1', '#ef4444', '#10b981'],
+
+          backgroundColor: ['#2563eb', '#16a34a', '#f97316', '#0ea5e9', '#64748b'],
+
         },
       ],
     },
@@ -487,8 +541,94 @@ function downloadCsv() {
   URL.revokeObjectURL(url);
 }
 
-function setStatus(message) {
-  document.getElementById('status').textContent = message;
+
+function setStatus(message, busy = false) {
+  const el = document.getElementById('status');
+  el.textContent = message;
+  el.setAttribute('aria-busy', busy ? 'true' : 'false');
+}
+
+function renderSkeletonCards(count = 8) {
+  const container = document.getElementById('cards');
+  container.innerHTML = '';
+  const grid = document.createElement('div');
+  grid.className = 'skeleton-grid';
+  for (let i = 0; i < count; i++) {
+    const card = document.createElement('div');
+    card.className = 'skeleton-card';
+    card.innerHTML = `
+      <div class="skeleton-line lg"></div>
+      <div class="skeleton-line md"></div>
+      <div class="skeleton-line sm"></div>
+    `;
+    grid.appendChild(card);
+  }
+  container.appendChild(grid);
+}
+
+function animateCounters() {
+  const toAnimate = [
+    ['statTotalProducts', state.products.length],
+    ['statAlerts', computeAlerts(state.products).length],
+  ];
+  toAnimate.forEach(([id, target]) => countUp(id, Number(target) || 0, 600));
+}
+
+function countUp(elementId, target, duration = 800) {
+  const el = document.getElementById(elementId);
+  if (!el) return;
+  const start = 0;
+  const startTime = Date.now();
+  function tick() {
+    const progress = Math.min(1, (Date.now() - startTime) / duration);
+    const value = Math.floor(start + (target - start) * progress);
+    el.textContent = new Intl.NumberFormat('en-IN').format(value);
+    if (progress < 1) requestAnimationFrame(tick);
+  }
+  requestAnimationFrame(tick);
+}
+
+function showToast(message, type = 'info') {
+  const el = document.getElementById('toast');
+  if (!el) return;
+  el.textContent = message;
+  el.hidden = false;
+  el.classList.add('show');
+  setTimeout(() => {
+    el.classList.remove('show');
+    el.hidden = true;
+  }, 2200);
+}
+
+function handleHotkeys(e) {
+  if (e.target && ['INPUT','SELECT','TEXTAREA'].includes(e.target.tagName)) return;
+  if (e.key.toLowerCase() === 'f') {
+    document.getElementById('search').focus();
+  } else if (e.key.toLowerCase() === 'r') {
+    document.getElementById('refreshBtn').click();
+  }
+}
+
+function persistFiltersToStorage() {
+  const data = {
+    search: document.getElementById('search').value,
+    sectors: document.getElementById('sectors').value,
+    minCapex: document.getElementById('minCapex').value,
+    maxCapex: document.getElementById('maxCapex').value,
+    sort: document.getElementById('sort').value,
+  };
+  persistJSON('bfi_filters', data);
+}
+
+function hydrateFiltersFromStorage() {
+  const saved = restoreJSON('bfi_filters', null);
+  if (!saved) return;
+  document.getElementById('search').value = saved.search || '';
+  document.getElementById('sectors').value = saved.sectors || '';
+  document.getElementById('minCapex').value = saved.minCapex || '';
+  document.getElementById('maxCapex').value = saved.maxCapex || '';
+  document.getElementById('sort').value = saved.sort || 'opportunity';
+
 }
 
 function formatValue(value, mode = 'usd') {
@@ -532,4 +672,6 @@ function restoreJSON(key, fallback) {
     console.warn(`Failed to parse ${key} from localStorage`, error);
     return fallback;
   }
+
 }
+

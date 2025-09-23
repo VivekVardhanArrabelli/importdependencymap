@@ -14,7 +14,7 @@ from . import normalize
 
 LOGGER = logging.getLogger(__name__)
 
-DEFAULT_BASE = "https://comtradeapi.un.org/public/v1/preview"
+
 MAX_RETRIES = 4
 RETRY_STATUS = {429, 500, 502, 503, 504}
 
@@ -36,7 +36,12 @@ class Record:
 
 
 def _base_url() -> str:
-    return os.getenv("COMTRADE_BASE", DEFAULT_BASE)
+
+    base = os.getenv("COMTRADE_BASE")
+    if not base:
+        raise RuntimeError("COMTRADE_BASE environment variable is required")
+    return base
+
 
 
 def _request(params: Dict[str, str]) -> Dict:
