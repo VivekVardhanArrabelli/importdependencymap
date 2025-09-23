@@ -42,11 +42,7 @@ These scripts call the protected admin endpoints, populating sample HS data from
 `data/top100_hs.csv` contains a curated starter list that can be ingested via `/admin/seed` after the database connection is working. It is purely a bootstrap aid and is not used automatically.
 
 ## Data Sources
-- **DGCI&S / Tradestat** – official monthly import/export databank for India; scheduled integration will ingest HS-level CSV/API exports (`tradestat.commerce.gov.in`).
-- **UN Comtrade** – currently integrated live source providing partner-country flows and historical HS trade series.
-- **WITS / World Bank** – planned source for tariff, duty, and policy metrics (`wits.worldbank.org`).
-- **data.gov.in / OGD India** – planned source for ITC/HS mappings, import policy notifications, and allied government datasets (`data.gov.in`).
-- **Crowdsourced & vendor inputs** – CAPEX/OPEX templates, machine vendor directories, and skills taxonomies curated via the community.
+- **UN Comtrade** – live HS6 monthly import data for India accessed via the public API. All ETL jobs and analytics are presently driven by this feed.
 
 ## ETL & Automation
 - `POST /admin/etl/comtrade?from=YYYY-MM&to=YYYY-MM` downloads monthly UN Comtrade data (HS6), upserts products/imports, and recomputes metrics.
