@@ -81,6 +81,50 @@ def _request(params: Dict[str, str]) -> Dict:
     raise RuntimeError("Comtrade API request failed after retries")
 
 
+def _extract_dataset(payload: Dict) -> List[Dict]:
+    dataset = payload.get("dataset")
+    if isinstance(dataset, list):
+        return dataset
+    data = payload.get("data")
+    if isinstance(data, list):
+        return data
+    if isinstance(data, dict):
+        nested = data.get("dataset")
+        if isinstance(nested, list):
+            return nested
+    return []
+
+
+def _next_cursor(payload: Dict) -> Optional[str]:
+    links = payload.get("links") or {}
+    if isinstance(links, dict):
+        next_link = links.get("next")
+        if isinstance(next_link, dict):
+            next_link = next_link.get("href") or next_link.get("url")
+        if isinstance(next_link, str):
+            parsed = parse.urlparse(next_link)
+            if parsed.query:
+                query = dict(parse.parse_qsl(parsed.query))
+                cursor = query.get("cursor")
+                if cursor:
+                    return cursor
+            if next_link.startswith("cursor="):
+                return next_link.split("cursor=", 1)[1]
+            if next_link:
+                return next_link
+    meta = payload.get("meta")
+    if isinstance(meta, dict):
+        for key in ("next", "cursor"):
+            cursor = meta.get(key)
+            if isinstance(cursor, str) and cursor:
+                return cursor
+    for key in ("next", "cursor"):
+        cursor = payload.get(key)
+        if isinstance(cursor, str) and cursor:
+            return cursor
+    return None
+
+
 def _parse_dataset(dataset: Iterable[Dict]) -> List[Record]:
     records: List[Record] = []
     for row in dataset:
@@ -133,13 +177,17 @@ def fetch_range(
     reporter_code: Optional[str] = None,
 ) -> List[Record]:
     reporter = reporter or os.getenv("COMTRADE_REPORTER", "India")
-    reporter_code = reporter_code or os.getenv("COMTRADE_REPORTER_CODE")
+
+    reporter_code_env = os.getenv("COMTRADE_REPORTER_CODE")
+    reporter_code = reporter_code or (reporter_code_env.strip() if reporter_code_env else "699")
     flow = flow or os.getenv("COMTRADE_FLOW", "import")
     frequency = frequency or os.getenv("COMTRADE_FREQ", "M")
     partner = os.getenv("COMTRADE_PARTNER")
-    partner_code = os.getenv("COMTRADE_PARTNER_CODE")
+    partner_code_env = os.getenv("COMTRADE_PARTNER_CODE")
+    partner_code = partner_code_env.strip() if partner_code_env else "0"
 
-    params = {
+
+    base_params = {
         "reporter": reporter,
         "flow": flow,
         "time_period": f"{from_period}:{to_period}",
@@ -148,13 +196,32 @@ def fetch_range(
         "classification": "HS",
     }
     if reporter_code:
-        params["reporterCode"] = reporter_code
+
+        base_params["reporterCode"] = reporter_code
     if partner_code:
-        params["partnerCode"] = partner_code
+        base_params["partnerCode"] = partner_code
     elif partner:
-        params["partner"] = partner
-    payload = _request(params)
-    dataset = payload.get("dataset") or []
+        base_params["partner"] = partner
+
+    dataset: List[Dict] = []
+    cursor: Optional[str] = None
+    while True:
+        params = dict(base_params)
+        if cursor:
+            params["cursor"] = cursor
+        payload = _request(params)
+
+        validation = payload.get("validation")
+        if isinstance(validation, dict) and validation.get("status", "").lower() == "error":
+            message = validation.get("message") or validation.get("description") or "Unknown validation error"
+            raise RuntimeError(f"Comtrade request rejected: {message}")
+
+        dataset.extend(_extract_dataset(payload))
+        cursor = _next_cursor(payload)
+        if not cursor:
+            break
+
+
     LOGGER.info("Fetched %s rows from Comtrade", len(dataset))
     return _parse_dataset(dataset)
 

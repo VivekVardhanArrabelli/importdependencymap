@@ -20,15 +20,60 @@ class ComtradeETLTest(unittest.TestCase):
         os.environ["COMTRADE_REPORTER"] = "India"
         os.environ["COMTRADE_FLOW"] = "import"
 
-        comtrade.fetch_range("202401", "202402")
+
+        comtrade.fetch_range("2024-01", "2024-02")
+
 
         called_params = mock_request.call_args[0][0]
         self.assertEqual(called_params["reporter"], "India")
         self.assertEqual(called_params["flow"], "import")
-        self.assertEqual(called_params["time_period"], "202401:202402")
+
+        self.assertEqual(called_params["time_period"], "2024-01:2024-02")
+        self.assertEqual(called_params["reporterCode"], "699")
+        self.assertEqual(called_params["partnerCode"], "0")
+
 
         os.environ.pop("COMTRADE_REPORTER", None)
         os.environ.pop("COMTRADE_FLOW", None)
+
+
+    @patch("server.etl.comtrade._request")
+    def test_fetch_range_handles_pagination_and_validation(self, mock_request):
+        first_payload = {
+            "data": [{
+                "cmdCode": "850760",
+                "period": "202401",
+                "cmdDescE": "Lithium batteries",
+                "TradeValue": "1000",
+            }],
+            "links": {"next": "https://example.com/api?cursor=abc"},
+        }
+        second_payload = {
+            "dataset": [{
+                "cmdCode": "850780",
+                "period": "202402",
+                "cmdDescE": "Nickel batteries",
+                "TradeValue": "2000",
+            }],
+        }
+        mock_request.side_effect = [first_payload, second_payload]
+
+        records = comtrade.fetch_range("2024-01", "2024-02")
+
+        self.assertEqual(len(records), 2)
+        self.assertEqual(mock_request.call_count, 2)
+        first_call_params = mock_request.call_args_list[0][0][0]
+        second_call_params = mock_request.call_args_list[1][0][0]
+        self.assertNotIn("cursor", first_call_params)
+        self.assertEqual(second_call_params.get("cursor"), "abc")
+
+    @patch("server.etl.comtrade._request")
+    def test_fetch_range_raises_on_validation_error(self, mock_request):
+        mock_request.return_value = {"validation": {"status": "ERROR", "message": "Invalid"}}
+
+        with self.assertRaises(RuntimeError):
+            comtrade.fetch_range("2024-01", "2024-01")
+
 
     @patch("server.etl.comtrade.db.insert_monthly")
     @patch("server.etl.comtrade.db.upsert_product")

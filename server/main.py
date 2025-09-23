@@ -163,12 +163,11 @@ def seed_database(_: None = Depends(admin_required)) -> Dict[str, Any]:
     }
 
 
-def _parse_period(period: str) -> str:
+def _parse_period(period: str) -> datetime:
     try:
-        parsed = datetime.strptime(period, "%Y-%m")
+        return datetime.strptime(period, "%Y-%m")
     except ValueError as exc:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"Invalid period: {period}") from exc
-    return parsed.strftime("%Y%m")
 
 
 @app.post("/admin/etl/comtrade")
@@ -179,13 +178,17 @@ def trigger_comtrade(
 ) -> Dict[str, Any]:
     _require_database_url()
 
-    start_key = _parse_period(from_period)
-    end_key = _parse_period(to_period)
-    if start_key > end_key:
+    start_dt = _parse_period(from_period)
+    end_dt = _parse_period(to_period)
+    if start_dt > end_dt:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="from must be <= to")
 
     with db.connect() as conn:
-        summary = comtrade.run(conn, from_period=start_key, to_period=end_key)
+        summary = comtrade.run(
+            conn,
+            from_period=start_dt.strftime("%Y-%m"),
+            to_period=end_dt.strftime("%Y-%m"),
+        )
         baseline_summary = jobs.recompute_baseline(conn)
         progress_summary = jobs.recompute_progress(conn)
 
