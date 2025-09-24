@@ -35,6 +35,7 @@ app.add_middleware(
 BASE_DIR = Path(__file__).resolve().parent.parent
 CLIENT_DIR = BASE_DIR / "client"
 
+
 try:
     app.mount("/static", StaticFiles(directory=CLIENT_DIR), name="client")
 except RuntimeError as exc:  # pragma: no cover - optional dependency missing
@@ -44,6 +45,7 @@ except RuntimeError as exc:  # pragma: no cover - optional dependency missing
         raise
 
 SEED_CSV_PATH = BASE_DIR / "data" / "top100_hs.csv"
+
 DEFAULT_SOURCE = "database"
 ADMIN_SOURCE = "admin"
 MANUAL_SOURCE = "manual"
