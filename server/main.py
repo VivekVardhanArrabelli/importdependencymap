@@ -35,9 +35,17 @@ app.add_middleware(
 BASE_DIR = Path(__file__).resolve().parent.parent
 CLIENT_DIR = BASE_DIR / "client"
 
-app.mount("/static", StaticFiles(directory=CLIENT_DIR), name="client")
 
-DATA_PATH = BASE_DIR / "data" / "top100_hs.csv"
+try:
+    app.mount("/static", StaticFiles(directory=CLIENT_DIR), name="client")
+except RuntimeError as exc:  # pragma: no cover - optional dependency missing
+    if "aiofiles" in str(exc):
+        LOGGER.warning("Static files mount skipped: %s", exc)
+    else:
+        raise
+
+SEED_CSV_PATH = BASE_DIR / "data" / "top100_hs.csv"
+
 DEFAULT_SOURCE = "database"
 ADMIN_SOURCE = "admin"
 MANUAL_SOURCE = "manual"
@@ -67,9 +75,14 @@ def _require_database_url() -> str:
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="DATABASE_URL not configured")
     return url
 def _read_seed_rows() -> List[Dict[str, str]]:
-    if not DATA_PATH.exists():
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"Seed CSV not found at {DATA_PATH}")
-    with DATA_PATH.open("r", encoding="utf-8") as handle:
+    """Load curated seed rows; invoked only by the admin seed endpoint."""
+
+    if not SEED_CSV_PATH.exists():
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Seed CSV not found at {SEED_CSV_PATH}",
+        )
+    with SEED_CSV_PATH.open("r", encoding="utf-8") as handle:
         rows = list(csv.DictReader(handle))
     if not rows:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Seed CSV is empty")
