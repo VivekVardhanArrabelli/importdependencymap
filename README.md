@@ -39,8 +39,10 @@ These scripts call the protected admin endpoints, populating sample HS data from
 ### Database Requirement
 `DATABASE_URL` must be configured. Admin endpoints and API queries fail fast when the database is unreachable to prevent serving stale placeholder data.
 
+- No fallback dataset is bundled at runtime—the API always queries Postgres. If you need demo content, run the admin seed task (below) after connecting a database.
+
 ### Seed CSV (optional)
-`data/top100_hs.csv` contains a curated starter list that can be ingested via `/admin/seed` after the database connection is working. It is purely a bootstrap aid and is not used automatically.
+`data/top100_hs.csv` contains a curated starter list that can be ingested via `/admin/seed` after the database connection is working. It is purely a bootstrap aid and is not used automatically or read on startup.
 
 ## Data Sources
 
