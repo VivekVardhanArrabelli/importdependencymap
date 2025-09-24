@@ -32,9 +32,12 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-app.mount("/static", StaticFiles(directory="client"), name="client")
+BASE_DIR = Path(__file__).resolve().parent.parent
+CLIENT_DIR = BASE_DIR / "client"
 
-DATA_PATH = Path("data/top100_hs.csv")
+app.mount("/static", StaticFiles(directory=CLIENT_DIR), name="client")
+
+DATA_PATH = BASE_DIR / "data" / "top100_hs.csv"
 DEFAULT_SOURCE = "database"
 ADMIN_SOURCE = "admin"
 MANUAL_SOURCE = "manual"
@@ -103,7 +106,7 @@ def ensure_schema() -> None:
 
 @app.get("/", include_in_schema=False)
 def serve_index():
-    index_path = Path("client/index.html")
+    index_path = CLIENT_DIR / "index.html"
     if index_path.exists():
         return FileResponse(index_path)
     return HTMLResponse("<h1>Build for India</h1><p>Client not found.</p>")
