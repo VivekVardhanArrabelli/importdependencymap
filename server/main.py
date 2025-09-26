@@ -17,6 +17,7 @@ from psycopg2.extras import RealDictCursor
 
 from . import db, jobs
 from .etl import comtrade, dgcis, normalize
+from dateutil.relativedelta import relativedelta
 from .schemas import DomesticCapabilityPayload, ProductCard
 
 load_dotenv()
@@ -261,6 +262,40 @@ def trigger_recompute(_: None = Depends(admin_required)) -> Dict[str, Any]:
         "source": ADMIN_SOURCE,
         "last_updated": datetime.now(timezone.utc).isoformat(),
     }
+
+
+@app.post("/admin/etl/nightly")
+def trigger_nightly(_: None = Depends(admin_required)) -> Dict[str, Any]:
+    """Convenience endpoint for Railway HTTP Cron.
+
+    Computes from/to as 13 months ago to last full month (UTC) and runs
+    the Comtrade ETL followed by recompute.
+    """
+    _require_database_url()
+
+    # Compute the month range in UTC
+    today_utc = datetime.now(timezone.utc)
+    start_month = (today_utc.replace(day=1) - relativedelta(months=13)).strftime("%Y-%m")
+    end_month = (today_utc.replace(day=1) - relativedelta(months=1)).strftime("%Y-%m")
+
+    start_key = _parse_period(start_month)
+    end_key = _parse_period(end_month)
+
+    with db.connect() as conn:
+        summary = comtrade.run(conn, from_period=start_key, to_period=end_key)
+        baseline_summary = jobs.recompute_baseline(conn)
+        progress_summary = jobs.recompute_progress(conn)
+
+    summary.update(
+        {
+            "baseline": baseline_summary,
+            "progress": progress_summary,
+            "from": start_month,
+            "to": end_month,
+            "last_updated": datetime.now(timezone.utc).isoformat(),
+        }
+    )
+    return summary
 
 
 @app.get("/api/products")
