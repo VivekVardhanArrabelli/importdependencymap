@@ -278,11 +278,9 @@ def trigger_nightly(_: None = Depends(admin_required)) -> Dict[str, Any]:
     start_month = (today_utc.replace(day=1) - relativedelta(months=13)).strftime("%Y-%m")
     end_month = (today_utc.replace(day=1) - relativedelta(months=1)).strftime("%Y-%m")
 
-    start_key = _parse_period(start_month)
-    end_key = _parse_period(end_month)
-
+    # Pass YYYY-MM strings to ETL (expected by comtrade.run)
     with db.connect() as conn:
-        summary = comtrade.run(conn, from_period=start_key, to_period=end_key)
+        summary = comtrade.run(conn, from_period=start_month, to_period=end_month)
         baseline_summary = jobs.recompute_baseline(conn)
         progress_summary = jobs.recompute_progress(conn)
 

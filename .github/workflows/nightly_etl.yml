@@ -3,24 +3,27 @@ name: nightly-etl
 on:
   schedule:
     - cron: '0 3 * * *'
+  workflow_dispatch:
 
 jobs:
   run:
     runs-on: ubuntu-latest
     steps:
-      - name: Trigger Comtrade ETL
-        run: |
-          curl -sS -X POST \
-            -H "Authorization: Bearer ${ADMIN_KEY}" \
-            "${DEPLOY_URL}/admin/etl/comtrade?from=$(date -u -d '13 months ago' +%Y-%m)&to=$(date -u -d '1 month ago' +%Y-%m)"
+      - name: Trigger Nightly ETL (server-computed window)
         env:
           ADMIN_KEY: ${{ secrets.ADMIN_KEY }}
           DEPLOY_URL: ${{ secrets.DEPLOY_URL }}
-      - name: Recompute metrics
         run: |
-          curl -sS -X POST \
+          : "${ADMIN_KEY:?Missing ADMIN_KEY}"
+          : "${DEPLOY_URL:?Missing DEPLOY_URL}"
+          curl -fsS -X POST \
+            -H "Authorization: Bearer ${ADMIN_KEY}" \
+            "${DEPLOY_URL}/admin/etl/nightly"
+      - name: Recompute metrics (extra safety)
+        env:
+          ADMIN_KEY: ${{ secrets.ADMIN_KEY }}
+          DEPLOY_URL: ${{ secrets.DEPLOY_URL }}
+        run: |
+          curl -fsS -X POST \
             -H "Authorization: Bearer ${ADMIN_KEY}" \
             "${DEPLOY_URL}/admin/recompute"
-        env:
-          ADMIN_KEY: ${{ secrets.ADMIN_KEY }}
-          DEPLOY_URL: ${{ secrets.DEPLOY_URL }}
