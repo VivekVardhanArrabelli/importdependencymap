@@ -52,7 +52,12 @@ def _resolve_endpoint() -> str:
     if path:
         endpoint = parse.urljoin(base + "/", path.lstrip("/"))
     else:
-        endpoint = parse.urljoin(base + "/", "v1/get/HS")
+        # If COMTRADE_BASE already points at a versioned API path (e.g. /public/v1/preview),
+        # treat it as the full endpoint. Otherwise, fall back to legacy v1/get/HS.
+        if "/v1/" in base or "/public/" in base:
+            endpoint = base
+        else:
+            endpoint = parse.urljoin(base + "/", "v1/get/HS")
     return endpoint
 
 
