@@ -6,7 +6,7 @@ import logging
 import os
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Annotated
 
 from dotenv import load_dotenv
 from fastapi import Depends, FastAPI, Header, HTTPException, Query, status
@@ -55,14 +55,14 @@ MANUAL_SOURCE = "manual"
 class AdminGuard:
     """Dependency to guard admin endpoints."""
 
-    def __call__(self, authorization: Optional[str] = Header(default=None)) -> None:
+    def __call__(self, authorization: Annotated[Optional[str], Header()] = None) -> None:
         admin_key = os.getenv("ADMIN_KEY")
         if not admin_key:
             LOGGER.warning("ADMIN_KEY not configured; denying admin access")
             raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Unauthorized")
-        if not authorization or not authorization.startswith("Bearer "):
+        if not authorization or not str(authorization).startswith("Bearer "):
             raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Unauthorized")
-        token = authorization.split(" ", 1)[1].strip()
+        token = str(authorization).split(" ", 1)[1].strip()
         if token != admin_key:
             raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Unauthorized")
 
