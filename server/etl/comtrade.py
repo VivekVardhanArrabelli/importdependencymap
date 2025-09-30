@@ -7,6 +7,7 @@ import os
 import time
 from dataclasses import dataclass
 from typing import Dict, Iterable, List, Optional, Tuple
+
 from urllib import error, parse, request
 
 from .. import db, forex
@@ -14,10 +15,8 @@ from . import normalize
 
 LOGGER = logging.getLogger(__name__)
 
-
 MAX_RETRIES = 4
 RETRY_STATUS = {429, 500, 502, 503, 504}
-
 
 @dataclass
 class Record:
@@ -34,32 +33,20 @@ class Record:
     qty: Optional[float] = None
     partner_country: Optional[str] = None
 
-
 def _base_url() -> str:
-
     base = os.getenv("COMTRADE_BASE")
     if not base:
         raise RuntimeError("COMTRADE_BASE environment variable is required")
-    return base
-
-
+    return base.rstrip("/")
 
 def _resolve_endpoint() -> str:
-    """Return the fully qualified endpoint for Comtrade requests."""
-
-    base = _base_url().rstrip("/")
-    path = os.getenv("COMTRADE_PATH")
-    if path:
-        endpoint = parse.urljoin(base + "/", path.lstrip("/"))
+    """Return the fully qualified /data endpoint for preview API."""
+    base = _base_url()
+    if "/preview" in base:
+        return f"{base}/data"
     else:
-        # If COMTRADE_BASE already points at a versioned API path (e.g. /public/v1/preview),
-        # treat it as the full endpoint. Otherwise, fall back to legacy v1/get/HS.
-        if "/v1/" in base or "/public/" in base:
-            endpoint = base
-        else:
-            endpoint = parse.urljoin(base + "/", "v1/get/HS")
-    return endpoint
-
+        # Fallback for legacy, but prefer preview
+        return f"{base}/v1/preview/data"
 
 def _request(params: Dict[str, str]) -> Dict:
     query = parse.urlencode(params)
@@ -72,63 +59,37 @@ def _request(params: Dict[str, str]) -> Dict:
                     raise error.HTTPError(url, status, "retryable", hdrs=None, fp=None)
                 payload = resp.read()
                 return json.loads(payload.decode("utf-8"))
-        except error.HTTPError as exc:  # pragma: no cover - integration scenario
+        except error.HTTPError as exc:
             if exc.code in RETRY_STATUS and attempt < MAX_RETRIES:
                 LOGGER.warning("Comtrade HTTP %s (%s/%s); backing off", exc.code, attempt, MAX_RETRIES)
                 time.sleep(min(2 ** attempt, 30))
                 continue
             raise
-        except error.URLError as exc:  # pragma: no cover - integration scenario
+        except error.URLError as exc:
             LOGGER.warning("Comtrade request failed (%s/%s): %s", attempt, MAX_RETRIES, exc)
             if attempt == MAX_RETRIES:
                 raise
             time.sleep(min(2 ** attempt, 30))
     raise RuntimeError("Comtrade API request failed after retries")
 
-
 def _extract_dataset(payload: Dict) -> List[Dict]:
-    dataset = payload.get("dataset")
-    if isinstance(dataset, list):
-        return dataset
-    data = payload.get("data")
+    data = payload.get("data", [])
     if isinstance(data, list):
         return data
-    if isinstance(data, dict):
-        nested = data.get("dataset")
-        if isinstance(nested, list):
-            return nested
     return []
 
-
 def _next_cursor(payload: Dict) -> Optional[str]:
-    links = payload.get("links") or {}
+    links = payload.get("links", {})
     if isinstance(links, dict):
         next_link = links.get("next")
         if isinstance(next_link, dict):
-            next_link = next_link.get("href") or next_link.get("url")
-        if isinstance(next_link, str):
+            next_link = next_link.get("href")
+        if isinstance(next_link, str) and "?" in next_link:
             parsed = parse.urlparse(next_link)
-            if parsed.query:
-                query = dict(parse.parse_qsl(parsed.query))
-                cursor = query.get("cursor")
-                if cursor:
-                    return cursor
-            if next_link.startswith("cursor="):
-                return next_link.split("cursor=", 1)[1]
-            if next_link:
-                return next_link
-    meta = payload.get("meta")
-    if isinstance(meta, dict):
-        for key in ("next", "cursor"):
-            cursor = meta.get(key)
-            if isinstance(cursor, str) and cursor:
+            cursor = dict(parse.parse_qsl(parsed.query)).get("cursor")
+            if cursor:
                 return cursor
-    for key in ("next", "cursor"):
-        cursor = payload.get(key)
-        if isinstance(cursor, str) and cursor:
-            return cursor
     return None
-
 
 def _parse_dataset(dataset: Iterable[Dict]) -> List[Record]:
     records: List[Record] = []
@@ -140,24 +101,18 @@ def _parse_dataset(dataset: Iterable[Dict]) -> List[Record]:
         if len(period) != 6:
             continue
         year, month = int(period[:4]), int(period[4:6])
-        title = (row.get("cmdDescE") or "").strip()
-        description = (row.get("mainCategory") or row.get("aggLevel")) or ""
-        partner = (row.get("ptTitle") or row.get("pt3ISO") or "").strip() or None
-        try:
-            value_usd = float(row.get("TradeValue")) if row.get("TradeValue") is not None else None
-        except (ValueError, TypeError):
-            value_usd = None
-        qty_raw = row.get("NetWeight") or row.get("qty")
-        try:
-            qty = float(qty_raw) if qty_raw is not None else None
-        except (ValueError, TypeError):
-            qty = None
+        title = (row.get("cmdDescE") or row.get("cmdDescription") or "").strip()
+        description = (row.get("mainCategory") or "").strip()
+        partner = row.get("pt3ISO") or row.get("ptTitle") or None
+        value_usd = float(row.get("TradeValue", 0)) if row.get("TradeValue") is not None else None
+        qty_raw = row.get("NetWeight") or row.get("primaryValue")
+        qty = float(qty_raw) if qty_raw is not None else None
         sectors = normalize.infer_sectors(title, description)
         records.append(
             Record(
                 hs_code=hs_code,
                 title=title or f"HS {hs_code}",
-                description=description if isinstance(description, str) else "",
+                description=description,
                 sectors=sectors,
                 capex_min=None,
                 capex_max=None,
@@ -171,65 +126,68 @@ def _parse_dataset(dataset: Iterable[Dict]) -> List[Record]:
         )
     return records
 
+def _build_periods(from_period: str, to_period: str) -> List[str]:
+    """Generate comma-separated YYYYMM periods for preview API."""
+    from_parts = [int(from_period[:4]), int(from_period[4:])]
+    to_parts = [int(to_period[:4]), int(to_period[4:])]
+    periods = []
+    year, month = from_parts
+    while year < to_parts[0] or (year == to_parts[0] and month <= to_parts[1]):
+        periods.append(f"{year:04d}{month:02d}")
+        month += 1
+        if month > 12:
+            month = 1
+            year += 1
+    return periods
 
 def fetch_range(
     from_period: str,
     to_period: str,
     *,
-    reporter: Optional[str] = None,
-    flow: Optional[str] = None,
-    frequency: Optional[str] = None,
     reporter_code: Optional[str] = None,
+    flow_code: Optional[str] = None,
+    frequency: Optional[str] = None,
 ) -> List[Record]:
-    reporter = reporter or os.getenv("COMTRADE_REPORTER", "India")
-
-    reporter_code_env = os.getenv("COMTRADE_REPORTER_CODE")
-    reporter_code = reporter_code or (reporter_code_env.strip() if reporter_code_env else "699")
-    flow = flow or os.getenv("COMTRADE_FLOW", "import")
+    reporter_code = reporter_code or os.getenv("COMTRADE_REPORTER", "356")  # India
+    flow_code = flow_code or os.getenv("COMTRADE_FLOW", "2")  # Imports
     frequency = frequency or os.getenv("COMTRADE_FREQ", "M")
-    partner = os.getenv("COMTRADE_PARTNER")
-    partner_code_env = os.getenv("COMTRADE_PARTNER_CODE")
-    partner_code = partner_code_env.strip() if partner_code_env else "0"
-
-
+    
+    # Base params for preview API
     base_params = {
-        "reporter": reporter,
-        "flow": flow,
-        "time_period": f"{from_period}:{to_period}",
-        "frequency": frequency,
-        "type": "C",
-        "classification": "HS",
+        "reporterCode": reporter_code,
+        "flowCode": flow_code,
+        "freqCode": frequency,
+        "typeCode": "C",  # Customs value
+        "period": ",".join(_build_periods(from_period, to_period)),
     }
-    if reporter_code:
-
-        base_params["reporterCode"] = reporter_code
-    if partner_code:
-        base_params["partnerCode"] = partner_code
-    elif partner:
-        base_params["partner"] = partner
-
-    dataset: List[Dict] = []
-    cursor: Optional[str] = None
-    while True:
+    
+    all_records = []
+    for chapter in range(1, 100):  # HS chapters 01-99
         params = dict(base_params)
-        if cursor:
-            params["cursor"] = cursor
-        payload = _request(params)
-
-        validation = payload.get("validation")
-        if isinstance(validation, dict) and validation.get("status", "").lower() == "error":
-            message = validation.get("message") or validation.get("description") or "Unknown validation error"
-            raise RuntimeError(f"Comtrade request rejected: {message}")
-
-        dataset.extend(_extract_dataset(payload))
-        cursor = _next_cursor(payload)
-        if not cursor:
-            break
-
-
-    LOGGER.info("Fetched %s rows from Comtrade", len(dataset))
-    return _parse_dataset(dataset)
-
+        params["cmdCode"] = f"{chapter:02d}*"  # Chapter wildcard (preview supports limited)
+        
+        dataset = []
+        cursor = None
+        while True:
+            if cursor:
+                params["cursor"] = cursor
+            payload = _request(params)
+            
+            if payload.get("statusCode") == 404:
+                LOGGER.debug("No data for HS chapter %02d", chapter)
+                break
+            
+            dataset.extend(_extract_dataset(payload))
+            cursor = _next_cursor(payload)
+            if not cursor:
+                break
+        
+        records = _parse_dataset(dataset)
+        all_records.extend(records)
+        LOGGER.info("Fetched %d records for HS chapter %02d", len(records), chapter)
+    
+    LOGGER.info("Total fetched %s rows from Comtrade", len(all_records))
+    return all_records
 
 def load(
     conn,
@@ -286,7 +244,6 @@ def load(
         monthly_rows += 1
     return len(products_seen), monthly_rows
 
-
 def run(
     conn,
     *,
@@ -299,7 +256,7 @@ def run(
 
     products, monthly_rows = load(conn, records)
     return {
-        "products": products,
-        "monthly_rows": monthly_rows,
+        "products_upserted": products,
+        "monthly_imports_upserted": monthly_rows,
         "source": "comtrade",
     }
