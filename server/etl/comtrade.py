@@ -49,11 +49,21 @@ def _resolve_endpoint() -> str:
         return f"{base}/v1/preview/data"
 
 def _request(params: Dict[str, str]) -> Dict:
+    # Add subscription key if available
+    key = os.getenv("COMTRADE_KEY")
+    if key:
+        params["subscription-key"] = key
+    
     query = parse.urlencode(params)
     url = f"{_resolve_endpoint()}?{query}"
     for attempt in range(1, MAX_RETRIES + 1):
         try:
-            with request.urlopen(url, timeout=45) as resp:
+            req = request.Request(url)
+            # Alternative: Add as header if preferred by docs
+            # if key:
+            #     req.add_header("Ocp-Apim-Subscription-Key", key)
+            
+            with request.urlopen(req, timeout=45) as resp:
                 status = resp.status
                 if status in RETRY_STATUS:
                     raise error.HTTPError(url, status, "retryable", hdrs=None, fp=None)
