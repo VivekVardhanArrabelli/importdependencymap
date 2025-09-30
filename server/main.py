@@ -9,7 +9,7 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional, Annotated
 
 from dotenv import load_dotenv
-from fastapi import Depends, FastAPI, Header, HTTPException, Query, status
+from fastapi import Depends, FastAPI, Header, HTTPException, Query, status, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, HTMLResponse
 from fastapi.staticfiles import StaticFiles
@@ -55,30 +55,25 @@ MANUAL_SOURCE = "manual"
 class AdminGuard:
     """Dependency to guard admin endpoints."""
 
-    def __call__(
-        self,
-        authorization: Annotated[Optional[str], Header()] = None,
-        x_admin_key: Annotated[Optional[str], Header(alias="X-Admin-Key")] = None,
-        key: Annotated[Optional[str], Query(alias="key")] = None,
-    ) -> None:
-        admin_key = os.getenv("ADMIN_KEY")
-        if admin_key is not None:
-            admin_key = admin_key.strip()
+    def __call__(self, request: Request) -> None:
+        admin_key = (os.getenv("ADMIN_KEY") or "").strip()
         if not admin_key:
             LOGGER.warning("ADMIN_KEY not configured; denying admin access")
             raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Unauthorized")
+
+        auth_header = request.headers.get("authorization") or request.headers.get("Authorization")
+        x_admin_key = request.headers.get("x-admin-key") or request.headers.get("X-Admin-Key")
+        query_key = request.query_params.get("key")
+
         token: Optional[str] = None
-        if authorization and str(authorization).startswith("Bearer "):
-            token = str(authorization).split(" ", 1)[1].strip()
-        elif x_admin_key:
-            token = str(x_admin_key).strip()
-        elif key:
-            token = str(key).strip()
-        if not token:
-            LOGGER.debug("Admin auth missing or malformed header")
-            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Unauthorized")
-        if (token or "").strip() != (admin_key or ""):
-            LOGGER.debug("Admin auth token mismatch (len=%s)", len(token))
+        if isinstance(auth_header, str) and auth_header.startswith("Bearer "):
+            token = auth_header.split(" ", 1)[1]
+        elif isinstance(x_admin_key, str):
+            token = x_admin_key
+        elif isinstance(query_key, str):
+            token = query_key
+
+        if not token or token.strip() != admin_key:
             raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Unauthorized")
 
 
