@@ -55,15 +55,25 @@ MANUAL_SOURCE = "manual"
 class AdminGuard:
     """Dependency to guard admin endpoints."""
 
-    def __call__(self, authorization: Annotated[Optional[str], Header()] = None) -> None:
+    def __call__(
+        self,
+        authorization: Annotated[Optional[str], Header()] = None,
+        x_admin_key: Annotated[Optional[str], Header(alias="X-Admin-Key")] = None,
+    ) -> None:
         admin_key = os.getenv("ADMIN_KEY")
         if not admin_key:
             LOGGER.warning("ADMIN_KEY not configured; denying admin access")
             raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Unauthorized")
-        if not authorization or not str(authorization).startswith("Bearer "):
+        token: Optional[str] = None
+        if authorization and str(authorization).startswith("Bearer "):
+            token = str(authorization).split(" ", 1)[1].strip()
+        elif x_admin_key:
+            token = str(x_admin_key).strip()
+        if not token:
+            LOGGER.debug("Admin auth missing or malformed header")
             raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Unauthorized")
-        token = str(authorization).split(" ", 1)[1].strip()
         if token != admin_key:
+            LOGGER.debug("Admin auth token mismatch (len=%s)", len(token))
             raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Unauthorized")
 
 
