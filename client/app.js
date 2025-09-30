@@ -5,7 +5,7 @@ const state = {
   trendChart: null,
   partnerChart: null,
   watchlist: restoreJSON('bfi_watchlist', []),
-  community: restoreJSON('bfi_registry', []),
+  community: [],
 };
 
 const numberFormatter = new Intl.NumberFormat('en-IN', {
@@ -26,11 +26,16 @@ const inrFormatter = new Intl.NumberFormat('en-IN', {
 
 document.addEventListener('DOMContentLoaded', () => {
   document.getElementById('footerYear').textContent = new Date().getFullYear();
+  // Clear previously persisted filters/community (no longer persisted by design)
+  try {
+    localStorage.removeItem('bfi_filters');
+    localStorage.removeItem('bfi_registry');
+  } catch (err) {
+    // ignore storage errors
+  }
   wireEvents();
   loadProducts();
   renderCommunity();
-
-  hydrateFiltersFromStorage();
   document.addEventListener('keydown', handleHotkeys);
 
 
@@ -45,7 +50,7 @@ function wireEvents() {
   document.getElementById('communityForm').addEventListener('submit', handleCommunitySubmit);
   document.getElementById('search').addEventListener('input', () => renderCards(filterProducts(state.products)));
 
-  document.getElementById('loadBtn').addEventListener('click', persistFiltersToStorage);
+  // Do not persist filters anymore
 
 }
 
@@ -611,27 +616,6 @@ function handleHotkeys(e) {
   }
 }
 
-function persistFiltersToStorage() {
-  const data = {
-    search: document.getElementById('search').value,
-    sectors: document.getElementById('sectors').value,
-    minCapex: document.getElementById('minCapex').value,
-    maxCapex: document.getElementById('maxCapex').value,
-    sort: document.getElementById('sort').value,
-  };
-  persistJSON('bfi_filters', data);
-}
-
-function hydrateFiltersFromStorage() {
-  const saved = restoreJSON('bfi_filters', null);
-  if (!saved) return;
-  document.getElementById('search').value = saved.search || '';
-  document.getElementById('sectors').value = saved.sectors || '';
-  document.getElementById('minCapex').value = saved.minCapex || '';
-  document.getElementById('maxCapex').value = saved.maxCapex || '';
-  document.getElementById('sort').value = saved.sort || 'opportunity';
-
-}
 
 function formatValue(value, mode = 'usd') {
   if (value === null || value === undefined) return '—';
