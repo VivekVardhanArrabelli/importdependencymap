@@ -3,6 +3,9 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta http-equiv="Cache-Control" content="no-store, no-cache, must-revalidate" />
+    <meta http-equiv="Pragma" content="no-cache" />
+    <meta http-equiv="Expires" content="0" />
     <title>Build for India Imports Intelligence</title>
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
@@ -10,7 +13,7 @@
       href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap"
       rel="stylesheet"
     />
-    <link rel="stylesheet" href="/static/styles.css" />
+    <link rel="stylesheet" href="/static/styles.css?v=2" />
   </head>
   <body>
 
@@ -148,22 +151,22 @@
 
       <section class="panel" id="business-case" aria-labelledby="businessCaseTitle">
         <h2 id="businessCaseTitle">Business Case Generator</h2>
-        <form id="businessCaseForm" class="form-grid">
+        <form id="businessCaseForm" class="form-grid" autocomplete="off">
           <label>
             Selected HS code
             <input id="caseHs" type="text" readonly placeholder="Select a product first" />
           </label>
           <label>
             Target factory output (units / month)
-            <input id="caseUnits" type="number" min="0" step="100" value="1000" />
+            <input id="caseUnits" type="number" min="0" step="100" placeholder="1000" autocomplete="off" />
           </label>
           <label>
             Average selling price per unit (USD)
-            <input id="casePrice" type="number" min="0" step="1" value="150" />
+            <input id="casePrice" type="number" min="0" step="1" placeholder="150" autocomplete="off" />
           </label>
           <label>
             Import replacement goal (%)
-            <input id="caseReplacement" type="number" min="0" max="100" step="5" value="40" />
+            <input id="caseReplacement" type="number" min="0" max="100" step="5" placeholder="40" autocomplete="off" />
           </label>
           <label>
             Estimated Capex (USD)
@@ -171,7 +174,7 @@
           </label>
           <label>
             Estimated Opex per month (USD)
-            <input id="caseOpex" type="number" min="0" step="1000" value="50000" />
+            <input id="caseOpex" type="number" min="0" step="1000" placeholder="50000" autocomplete="off" />
           </label>
           <button class="btn primary" type="submit">Calculate</button>
         </form>
@@ -180,7 +183,7 @@
 
       <section class="panel" id="compare" aria-labelledby="compareTitle">
         <h2 id="compareTitle">Compare HS Codes</h2>
-        <form id="compareForm" class="compare-form">
+        <form id="compareForm" class="compare-form" autocomplete="off">
           <div>
             <label for="compareA">First HS code</label>
             <select id="compareA"></select>
@@ -264,6 +267,6 @@
 
 
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-    <script src="/static/app.js"></script>
+    <script src="/static/app.js?v=2"></script>
   </body>
 </html>

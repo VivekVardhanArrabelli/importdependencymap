@@ -33,6 +33,14 @@ document.addEventListener('DOMContentLoaded', () => {
   } catch (err) {
     // ignore storage errors
   }
+  // Reset form defaults to placeholders so old typed values don't persist across deploys
+  try {
+    const ids = ['caseUnits','casePrice','caseReplacement','caseCapex','caseOpex'];
+    ids.forEach((id) => {
+      const el = document.getElementById(id);
+      if (el) el.value = '';
+    });
+  } catch (_) {}
   wireEvents();
   loadProducts();
   renderCommunity();
