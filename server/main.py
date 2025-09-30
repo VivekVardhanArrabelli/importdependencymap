@@ -61,6 +61,8 @@ class AdminGuard:
         x_admin_key: Annotated[Optional[str], Header(alias="X-Admin-Key")] = None,
     ) -> None:
         admin_key = os.getenv("ADMIN_KEY")
+        if admin_key is not None:
+            admin_key = admin_key.strip()
         if not admin_key:
             LOGGER.warning("ADMIN_KEY not configured; denying admin access")
             raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Unauthorized")
@@ -72,7 +74,7 @@ class AdminGuard:
         if not token:
             LOGGER.debug("Admin auth missing or malformed header")
             raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Unauthorized")
-        if token != admin_key:
+        if (token or "").strip() != (admin_key or ""):
             LOGGER.debug("Admin auth token mismatch (len=%s)", len(token))
             raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Unauthorized")
 
