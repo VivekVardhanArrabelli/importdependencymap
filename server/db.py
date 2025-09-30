@@ -308,12 +308,14 @@ def partner_shares(
             SELECT partner_country, SUM(value_usd) AS total
             FROM monthly_imports
             WHERE hs_code = %s
-              AND make_date(year, month, 1)
-                    BETWEEN make_date(%s, %s, 1) AND make_date(%s, %s, 1)
+              AND (
+                    (year > %s OR (year = %s AND month >= %s))
+                AND (year < %s OR (year = %s AND month <= %s))
+              )
             GROUP BY partner_country
             HAVING SUM(value_usd) IS NOT NULL
             """,
-            (hs_code, start[0], start[1], end[0], end[1]),
+            (hs_code, start[0], start[0], start[1], end[0], end[0], end[1]),
         )
         rows = cur.fetchall()
     total = sum(float(row["total"]) for row in rows if row["total"] is not None)
