@@ -264,6 +264,67 @@ def trigger_recompute(_: None = Depends(admin_required)) -> Dict[str, Any]:
     }
 
 
+@app.get("/admin/diag")
+def admin_diagnostics(_: None = Depends(admin_required)) -> Dict[str, Any]:
+    """Return environment, filesystem, and DB diagnostics for troubleshooting."""
+    # Environment presence (no secrets leaked)
+    env = {
+        "DATABASE_URL": bool(os.getenv("DATABASE_URL")),
+        "COMTRADE_BASE": bool(os.getenv("COMTRADE_BASE")),
+        "COMTRADE_PATH": bool(os.getenv("COMTRADE_PATH")),
+        "COMTRADE_FLOW": bool(os.getenv("COMTRADE_FLOW")),
+        "COMTRADE_REPORTER": bool(os.getenv("COMTRADE_REPORTER")),
+        "COMTRADE_FREQ": bool(os.getenv("COMTRADE_FREQ")),
+    }
+
+    # Filesystem checks
+    seed_exists = SEED_CSV_PATH.exists()
+    seed_info: Dict[str, Any] = {
+        "path": str(SEED_CSV_PATH),
+        "exists": seed_exists,
+        "size_bytes": SEED_CSV_PATH.stat().st_size if seed_exists else None,
+        "rows": None,
+    }
+    if seed_exists:
+        try:
+            with SEED_CSV_PATH.open("r", encoding="utf-8") as handle:
+                rows = list(csv.DictReader(handle))
+            seed_info["rows"] = len(rows)
+        except Exception as exc:  # pragma: no cover - diagnostics only
+            seed_info["error"] = str(exc)
+
+    # Resolve Comtrade endpoint (best effort)
+    try:
+        resolved_endpoint = comtrade._resolve_endpoint()  # type: ignore[attr-defined]
+    except Exception as exc:  # pragma: no cover - diagnostics only
+        resolved_endpoint = f"error: {exc}"
+
+    # DB checks
+    db_ok = False
+    counts: Dict[str, Any] = {"products": None, "monthly_imports": None}
+    try:
+        _require_database_url()
+        with db.connect() as conn:
+            with conn.cursor(cursor_factory=RealDictCursor) as cur:
+                cur.execute("SELECT COUNT(*) AS c FROM products")
+                counts["products"] = int(cur.fetchone()["c"])  # type: ignore[index]
+                cur.execute("SELECT COUNT(*) AS c FROM monthly_imports")
+                counts["monthly_imports"] = int(cur.fetchone()["c"])  # type: ignore[index]
+        db_ok = True
+    except Exception as exc:  # pragma: no cover - diagnostics only
+        counts["error"] = str(exc)
+
+    return {
+        "env": env,
+        "seed_csv": seed_info,
+        "comtrade_endpoint": resolved_endpoint,
+        "db_ok": db_ok,
+        "counts": counts,
+        "source": ADMIN_SOURCE,
+        "last_updated": datetime.now(timezone.utc).isoformat(),
+    }
+
+
 @app.post("/admin/etl/nightly")
 def trigger_nightly(_: None = Depends(admin_required)) -> Dict[str, Any]:
     """Convenience endpoint for Railway HTTP Cron.
