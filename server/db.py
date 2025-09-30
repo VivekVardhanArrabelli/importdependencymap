@@ -125,6 +125,13 @@ def init_db(conn) -> None:
         cur.execute(
             "ALTER TABLE monthly_imports ADD COLUMN IF NOT EXISTS fx_rate NUMERIC"
         )
+        # Ensure timestamp columns on products (for idempotency across schema evolutions)
+        cur.execute("ALTER TABLE products ADD COLUMN IF NOT EXISTS created_at timestamptz DEFAULT now()")
+        cur.execute("ALTER TABLE products ADD COLUMN IF NOT EXISTS updated_at timestamptz DEFAULT now()")
+        # Similarly for other tables if needed (e.g., baseline_imports already has updated_at in CREATE)
+        cur.execute("ALTER TABLE baseline_imports ADD COLUMN IF NOT EXISTS updated_at timestamptz DEFAULT now()")
+        cur.execute("ALTER TABLE import_progress ADD COLUMN IF NOT EXISTS last_updated timestamptz DEFAULT now()")
+        cur.execute("ALTER TABLE domestic_capability ADD COLUMN IF NOT EXISTS created_at timestamptz DEFAULT now()")
     LOGGER.info("Database schema ensured")
 
 
