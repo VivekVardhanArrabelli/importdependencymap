@@ -77,6 +77,9 @@ def admin_guard(request: Request) -> None:
 
 admin_required = admin_guard
 
+def _verify_admin(request: Request) -> None:
+    admin_guard(request)
+
 
 def _require_database_url() -> str:
     url = os.getenv("DATABASE_URL")
@@ -140,7 +143,8 @@ def health() -> Dict[str, bool]:
 
 
 @app.post("/admin/seed")
-def seed_database(_: None = Depends(admin_required)) -> Dict[str, Any]:
+def seed_database(request: Request) -> Dict[str, Any]:
+    _verify_admin(request)
     rows = [_parse_csv_row(row) for row in _read_seed_rows()]
     _require_database_url()
 
@@ -197,10 +201,11 @@ def _parse_period(period: str) -> datetime:
 
 @app.post("/admin/etl/comtrade")
 def trigger_comtrade(
-    _: None = Depends(admin_required),
+    request: Request,
     from_period: str = Query(..., alias="from", description="YYYY-MM inclusive start"),
     to_period: str = Query(..., alias="to", description="YYYY-MM inclusive end"),
 ) -> Dict[str, Any]:
+    _verify_admin(request)
     _require_database_url()
 
     start_dt = _parse_period(from_period)
@@ -229,12 +234,13 @@ def trigger_comtrade(
 
 @app.post("/admin/etl/dgcis")
 def trigger_dgcis(
-    _: None = Depends(admin_required),
+    request: Request,
     file_path: Optional[str] = Query(
         default=None,
         description="Path to DGCI&S CSV export (defaults to data/dgcis_latest.csv)",
     ),
 ) -> Dict[str, Any]:
+    _verify_admin(request)
     _require_database_url()
     source = Path(file_path or os.getenv("DGCIS_DEFAULT_PATH", "data/dgcis_latest.csv"))
     if not source.exists():
@@ -259,7 +265,8 @@ def trigger_dgcis(
 
 
 @app.post("/admin/recompute")
-def trigger_recompute(_: None = Depends(admin_required)) -> Dict[str, Any]:
+def trigger_recompute(request: Request) -> Dict[str, Any]:
+    _verify_admin(request)
     _require_database_url()
     with db.connect() as conn:
         baseline_summary = jobs.recompute_baseline(conn)
@@ -273,7 +280,8 @@ def trigger_recompute(_: None = Depends(admin_required)) -> Dict[str, Any]:
 
 
 @app.get("/admin/diag")
-def admin_diagnostics(_: None = Depends(admin_required)) -> Dict[str, Any]:
+def admin_diagnostics(request: Request) -> Dict[str, Any]:
+    _verify_admin(request)
     """Return environment, filesystem, and DB diagnostics for troubleshooting."""
     # Environment presence (no secrets leaked)
     env = {
@@ -334,12 +342,13 @@ def admin_diagnostics(_: None = Depends(admin_required)) -> Dict[str, Any]:
 
 
 @app.post("/admin/etl/nightly")
-def trigger_nightly(_: None = Depends(admin_required)) -> Dict[str, Any]:
+def trigger_nightly(request: Request) -> Dict[str, Any]:
     """Convenience endpoint for Railway HTTP Cron.
 
     Computes from/to as 13 months ago to last full month (UTC) and runs
     the Comtrade ETL followed by recompute.
     """
+    _verify_admin(request)
     _require_database_url()
 
     # Compute the month range in UTC
