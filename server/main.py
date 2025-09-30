@@ -52,32 +52,30 @@ ADMIN_SOURCE = "admin"
 MANUAL_SOURCE = "manual"
 
 
-class AdminGuard:
-    """Dependency to guard admin endpoints."""
+def admin_guard(request: Request) -> None:
+    """Dependency to guard admin endpoints (supports header or ?key=)."""
+    admin_key = (os.getenv("ADMIN_KEY") or "").strip()
+    if not admin_key:
+        LOGGER.warning("ADMIN_KEY not configured; denying admin access")
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Unauthorized")
 
-    def __call__(self, request: Request) -> None:
-        admin_key = (os.getenv("ADMIN_KEY") or "").strip()
-        if not admin_key:
-            LOGGER.warning("ADMIN_KEY not configured; denying admin access")
-            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Unauthorized")
+    auth_header = request.headers.get("authorization") or request.headers.get("Authorization")
+    x_admin_key = request.headers.get("x-admin-key") or request.headers.get("X-Admin-Key")
+    query_key = request.query_params.get("key")
 
-        auth_header = request.headers.get("authorization") or request.headers.get("Authorization")
-        x_admin_key = request.headers.get("x-admin-key") or request.headers.get("X-Admin-Key")
-        query_key = request.query_params.get("key")
+    token: Optional[str] = None
+    if isinstance(auth_header, str) and auth_header.startswith("Bearer "):
+        token = auth_header.split(" ", 1)[1]
+    elif isinstance(x_admin_key, str):
+        token = x_admin_key
+    elif isinstance(query_key, str):
+        token = query_key
 
-        token: Optional[str] = None
-        if isinstance(auth_header, str) and auth_header.startswith("Bearer "):
-            token = auth_header.split(" ", 1)[1]
-        elif isinstance(x_admin_key, str):
-            token = x_admin_key
-        elif isinstance(query_key, str):
-            token = query_key
-
-        if not token or token.strip() != admin_key:
-            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Unauthorized")
+    if not token or token.strip() != admin_key:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Unauthorized")
 
 
-admin_required = AdminGuard()
+admin_required = admin_guard
 
 
 def _require_database_url() -> str:
