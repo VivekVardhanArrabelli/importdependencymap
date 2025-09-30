@@ -59,6 +59,7 @@ class AdminGuard:
         self,
         authorization: Annotated[Optional[str], Header()] = None,
         x_admin_key: Annotated[Optional[str], Header(alias="X-Admin-Key")] = None,
+        key: Annotated[Optional[str], Query(alias="key")] = None,
     ) -> None:
         admin_key = os.getenv("ADMIN_KEY")
         if admin_key is not None:
@@ -71,6 +72,8 @@ class AdminGuard:
             token = str(authorization).split(" ", 1)[1].strip()
         elif x_admin_key:
             token = str(x_admin_key).strip()
+        elif key:
+            token = str(key).strip()
         if not token:
             LOGGER.debug("Admin auth missing or malformed header")
             raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Unauthorized")
