@@ -28,36 +28,37 @@ document.addEventListener('DOMContentLoaded', () => {
   // Navigation
   document.querySelectorAll('.nav-link').forEach(link => {
     link.addEventListener('click', (e) => {
+      const btn = e.currentTarget;
       document.querySelectorAll('.nav-link').forEach(l => l.classList.remove('active'));
       document.querySelectorAll('.view-section').forEach(s => s.classList.remove('active'));
-
-      e.target.classList.add('active');
-      const viewId = `view-${e.target.dataset.view}`;
-      document.getElementById(viewId).classList.add('active');
+      btn.classList.add('active');
+      const viewId = `view-${btn.dataset.view}`;
+      const viewEl = document.getElementById(viewId);
+      if (viewEl) viewEl.classList.add('active');
     });
   });
 });
 
 function wireEvents() {
   // Filters & Actions
-  document.getElementById('loadBtn').addEventListener('click', loadProducts);
-  document.getElementById('refreshBtn').addEventListener('click', () => loadProducts(true));
-  document.getElementById('downloadCsvBtn').addEventListener('click', downloadCsv);
+  const loadBtn = document.getElementById('loadBtn'); if (loadBtn) loadBtn.addEventListener('click', loadProducts);
+  const refreshBtn = document.getElementById('refreshBtn'); if (refreshBtn) refreshBtn.addEventListener('click', () => loadProducts(true));
+  const downloadBtn = document.getElementById('downloadCsvBtn'); if (downloadBtn) downloadBtn.addEventListener('click', downloadCsv);
   
   // Forms
-  document.getElementById('businessCaseForm').addEventListener('submit', handleBusinessCaseSubmit);
-  document.getElementById('compareForm').addEventListener('submit', handleCompareSubmit);
-  document.getElementById('communityForm').addEventListener('submit', handleCommunitySubmit);
-  document.getElementById('search').addEventListener('input', () => renderResults(filterProducts(state.products)));
+  const bcForm = document.getElementById('businessCaseForm'); if (bcForm) bcForm.addEventListener('submit', handleBusinessCaseSubmit);
+  const compareForm = document.getElementById('compareForm'); if (compareForm) compareForm.addEventListener('submit', handleCompareSubmit);
+  const communityForm = document.getElementById('communityForm'); if (communityForm) communityForm.addEventListener('submit', handleCommunitySubmit);
+  const searchInput = document.getElementById('search'); if (searchInput) searchInput.addEventListener('input', () => renderResults(filterProducts(state.products)));
   
   // Drawer
-  document.getElementById('closeDrawer').addEventListener('click', closeDrawer);
-  document.getElementById('drawerBackdrop').addEventListener('click', closeDrawer);
-  document.getElementById('drawerWatchBtn').addEventListener('click', toggleWatchFromDrawer);
+  const closeBtn = document.getElementById('closeDrawer'); if (closeBtn) closeBtn.addEventListener('click', closeDrawer);
+  const backdrop = document.getElementById('drawerBackdrop'); if (backdrop) backdrop.addEventListener('click', closeDrawer);
+  const drawerWatch = document.getElementById('drawerWatchBtn'); if (drawerWatch) drawerWatch.addEventListener('click', toggleWatchFromDrawer);
 
   // View Toggles
-  document.getElementById('viewGrid').addEventListener('click', () => switchViewMode('grid'));
-  document.getElementById('viewTable').addEventListener('click', () => switchViewMode('table'));
+  const viewGrid = document.getElementById('viewGrid'); if (viewGrid) viewGrid.addEventListener('click', () => switchViewMode('grid'));
+  const viewTable = document.getElementById('viewTable'); if (viewTable) viewTable.addEventListener('click', () => switchViewMode('table'));
 }
 
 function switchViewMode(mode) {
@@ -306,6 +307,35 @@ function handleBusinessCaseSubmit(event) {
     <div class="result-card"><h4>Capex</h4><p>${usdFormatter.format(capex)}</p></div>
     <div class="result-card"><h4>Payback</h4><p>${Number.isFinite(paybackMonths) ? paybackMonths.toFixed(1) + ' mo' : '—'}</p></div>
   `;
+}
+
+// Export CSV (current filtered view)
+function downloadCsv() {
+  try {
+    const items = filterProducts(state.products);
+    const rows = [
+      ['hs_code', 'title', 'sectors', 'last_12m_usd', 'opportunity_score'],
+      ...items.map((item) => [
+        item.hs_code,
+        item.title,
+        (item.sectors || []).join(';'),
+        item.last_12m_value_usd || 0,
+        item.opportunity_score ?? ''
+      ]),
+    ];
+    const csv = rows.map(r => r.map(v => JSON.stringify(v ?? '')).join(',')).join('\n');
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `bfi-commodities-${new Date().toISOString().slice(0,10)}.csv`;
+    link.click();
+    URL.revokeObjectURL(url);
+    showToast('CSV exported');
+  } catch (e) {
+    console.error(e);
+    showToast('Export failed', 'error');
+  }
 }
 
 // Compare
