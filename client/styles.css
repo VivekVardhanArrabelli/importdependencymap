@@ -59,6 +59,28 @@ html[data-theme="dark"] {
   --filter-svg: invert(1);
 }
 
+/* Explicit Light Theme (allows forcing light even if system is dark) */
+html[data-theme="light"] {
+  --bg-body: #fcfbf9;
+  --bg-panel: #ffffff;
+  --bg-subtle: #f5f2ed;
+  --text-main: #1a1a1a;
+  --text-muted: #5d5d5d;
+  --text-gold: #9f803e;
+  --accent-gold: #d4af37;
+  --accent-gold-dim: #aa8c2c;
+  --accent-blue: #2c3e50;
+  --accent-alert: #8b0000;
+  --border-light: #e6e1d8;
+  --border-strong: #d1c7b7;
+  --frame-bg: #ffffff;
+  --drawer-bg: #ffffff;
+  --toast-bg: #1a1a1a;
+  --toast-text: #ffffff;
+  --svg-opacity: 0.15;
+  --filter-svg: none;
+}
+
 /* Force Light Theme (overrides system dark) */
 html[data-theme="light"] {
   --bg-body: #fcfbf9;

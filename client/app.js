@@ -469,10 +469,10 @@ function renderCommunity() {
 function initTheme() {
   try {
     const saved = localStorage.getItem('theme'); // 'light' | 'dark' | null
-    if (saved === 'dark') {
-      document.documentElement.setAttribute('data-theme', 'dark');
+    if (saved === 'dark' || saved === 'light') {
+      document.documentElement.setAttribute('data-theme', saved);
     } else {
-      document.documentElement.removeAttribute('data-theme'); // light/system fallback
+      document.documentElement.removeAttribute('data-theme'); // system default
     }
     refreshThemeToggleIcon();
   } catch (_) {}
@@ -481,13 +481,9 @@ function initTheme() {
 function toggleTheme() {
   const html = document.documentElement;
   const current = html.getAttribute('data-theme');
-  if (current === 'dark') {
-    html.removeAttribute('data-theme');       // revert to light/system
-    localStorage.setItem('theme', 'light');   // record preference as light (no override)
-  } else {
-    html.setAttribute('data-theme', 'dark');  // force dark
-    localStorage.setItem('theme', 'dark');
-  }
+  const next = current === 'dark' ? 'light' : 'dark';
+  html.setAttribute('data-theme', next);
+  localStorage.setItem('theme', next);
   refreshThemeToggleIcon();
 }
 
