@@ -37,6 +37,29 @@
   --header-height: 70px;
 }
 
+/* Manual dark theme override always wins when set */
+html[data-theme="dark"] {
+  --bg-body: #0a0a0a;
+  --bg-panel: #121212;
+  --bg-subtle: #1a1a1a;
+  --text-main: #e0e0e0;
+  --text-muted: #a0a0a0;
+  --text-gold: #c5a059;
+  --accent-gold: #d4af37;
+  --accent-gold-dim: #c5a059;
+  --accent-blue: #4a6fa5;
+  --accent-alert: #ff4d4d;
+  --border-light: #333333;
+  --border-strong: #444444;
+  --frame-bg: #121212;
+  --drawer-bg: #121212;
+  --toast-bg: #e0e0e0;
+  --toast-text: #0a0a0a;
+  --svg-opacity: 0.05;
+  --filter-svg: invert(1);
+}
+
+/* System dark theme (fallback if no manual selection) */
 @media (prefers-color-scheme: dark) {
   :root {
     --bg-body: #0a0a0a;
@@ -146,6 +169,7 @@ input::placeholder { opacity: 0.4; font-style: italic; }
 .view-toggles { display: flex; gap: 0.5rem; }
 .icon-btn { background: none; border: 1px solid var(--border-light); cursor: pointer; padding: 0.4rem; color: var(--text-muted); font-size: 1.2rem; line-height: 1; }
 .icon-btn.active { background: var(--bg-subtle); color: var(--text-main); border-color: var(--text-main); }
+.theme-toggle { margin-left: 0.75rem; min-width: 2.25rem; }
 
 /* Cards Grid */
 .cards-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 1.5rem; }

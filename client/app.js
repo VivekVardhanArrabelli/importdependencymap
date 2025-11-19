@@ -21,6 +21,7 @@ const CHART_COLORS = {
 
 document.addEventListener('DOMContentLoaded', () => {
   const fy = document.getElementById('footerYear'); if (fy) fy.textContent = new Date().getFullYear();
+  initTheme();
   wireEvents();
   loadProducts();
   renderWatchlistSidebar();
@@ -59,6 +60,7 @@ function wireEvents() {
   // View Toggles
   const viewGrid = document.getElementById('viewGrid'); if (viewGrid) viewGrid.addEventListener('click', () => switchViewMode('grid'));
   const viewTable = document.getElementById('viewTable'); if (viewTable) viewTable.addEventListener('click', () => switchViewMode('table'));
+  const themeToggle = document.getElementById('themeToggle'); if (themeToggle) themeToggle.addEventListener('click', toggleTheme);
 }
 
 function switchViewMode(mode) {
@@ -422,4 +424,75 @@ function showToast(m, t) {
   const el = document.getElementById('toast'); el.textContent = m; el.hidden=false; el.classList.add('show');
   if(t==='error') el.style.border='1px solid red'; else el.style.border='1px solid var(--text-gold)';
   setTimeout(()=> { el.classList.remove('show'); setTimeout(()=>el.hidden=true,400); }, 2000);
+}
+
+// Community Registry
+function handleCommunitySubmit(event) {
+  event.preventDefault();
+  try {
+    const form = event.target;
+    const entry = {
+      name: form.name.value?.trim(),
+      category: form.category.value,
+      location: form.location?.value?.trim() || '',
+      notes: form.notes?.value?.trim() || '',
+    };
+    if (!entry.name || !entry.category) return;
+    state.community.unshift(entry);
+    persistJSON('bfi_registry', state.community);
+    form.reset();
+    renderCommunity();
+    showToast('Added to registry');
+  } catch (e) {
+    console.error(e);
+    showToast('Failed to add entry', 'error');
+  }
+}
+
+function renderCommunity() {
+  const list = document.getElementById('communityList');
+  if (!list) return;
+  if (!state.community.length) {
+    list.innerHTML = '<li class="meta-serif" style="padding: 1rem; color: var(--text-muted);">Registry Empty</li>';
+    return;
+  }
+  list.innerHTML = state.community.map((entry) => `
+    <li>
+      <strong style="display:block; font-family: 'Cinzel'">${entry.name}</strong>
+      <span class="meta" style="font-size: 0.8rem; color: var(--text-gold); text-transform: uppercase;">${entry.category}${entry.location ? ' • ' + entry.location : ''}</span>
+      ${entry.notes ? `<p class="meta-serif" style="margin:0.25rem 0 0">${entry.notes}</p>` : ''}
+    </li>
+  `).join('');
+}
+
+// Theme
+function initTheme() {
+  try {
+    const saved = localStorage.getItem('theme'); // 'light' | 'dark' | null
+    if (saved === 'dark' || saved === 'light') {
+      document.documentElement.setAttribute('data-theme', saved);
+    } else {
+      document.documentElement.removeAttribute('data-theme'); // fall back to system
+    }
+    refreshThemeToggleIcon();
+  } catch (_) {}
+}
+
+function toggleTheme() {
+  const html = document.documentElement;
+  const current = html.getAttribute('data-theme');
+  const next = current === 'dark' ? 'light' : 'dark';
+  html.setAttribute('data-theme', next);
+  localStorage.setItem('theme', next);
+  refreshThemeToggleIcon();
+}
+
+function refreshThemeToggleIcon() {
+  const btn = document.getElementById('themeToggle');
+  if (!btn) return;
+  const theme = document.documentElement.getAttribute('data-theme');
+  const prefersDark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
+  const effectiveDark = theme ? (theme === 'dark') : prefersDark;
+  btn.textContent = effectiveDark ? '☀' : '☾';
+  btn.title = effectiveDark ? 'Switch to light' : 'Switch to dark';
 }
