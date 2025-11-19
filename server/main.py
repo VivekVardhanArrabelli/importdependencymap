@@ -19,6 +19,7 @@ from . import db, jobs
 from .etl import comtrade, dgcis, normalize
 from dateutil.relativedelta import relativedelta
 from .schemas import DomesticCapabilityPayload, ProductCard
+from urllib.parse import urlencode
 
 load_dotenv()
 
@@ -656,3 +657,68 @@ def list_domestic_capability(hs_code: str) -> Dict[str, Any]:
         )
     last_updated = datetime.now(timezone.utc).isoformat() if items else None
     return {"items": items, "source": DEFAULT_SOURCE, "last_updated": last_updated}
+
+
+@app.get("/admin/etl/comtrade/probe")
+def comtrade_probe(
+    request: Request,
+    period: str = Query(..., description="YYYY-MM or YYYYMM"),
+    freq: str = Query(default="M", description="M=monthly, A=annual"),
+    cmd: str = Query(default="TOTAL", description="HS code or TOTAL"),
+    reporter: Optional[str] = Query(default=None, description="Override reporterCode (e.g., 356)"),
+    flow: Optional[str] = Query(default=None, description="Override flowCode (e.g., 2 for imports)"),
+    partner: Optional[str] = Query(default=None, description="Optional partnerCode (0 for World)"),
+) -> Dict[str, Any]:
+    _verify_admin(request)
+    # Build params following Comtrade v1 /data
+    reporter_code = (reporter or os.getenv("COMTRADE_REPORTER", "356")).strip()
+    flow_code = (flow or os.getenv("COMTRADE_FLOW", "2")).strip()
+    freq_code = (freq or os.getenv("COMTRADE_FREQ", "M")).strip()
+
+    # Normalize period to YYYYMM or YYYY
+    p = period.strip()
+    if "-" in p and len(p) >= 7:
+        p = f"{p[:4]}{p[5:7]}"
+
+    params = {
+        "typeCode": "C",
+        "freqCode": freq_code,
+        "clCode": "HS",
+        "reporterCode": reporter_code,
+        "flowCode": flow_code,
+        "period": p,
+        "cmdCode": cmd,
+    }
+    if partner:
+        params["partnerCode"] = partner
+
+    # Mask key in debug URL, but include it in real request via comtrade._request
+    endpoint = comtrade._resolve_endpoint()  # type: ignore[attr-defined]
+    debug_params = dict(params)
+    if os.getenv("COMTRADE_KEY"):
+        debug_params["subscription-key"] = "***"
+    debug_url = f"{endpoint}?{urlencode(debug_params)}"
+
+    try:
+        payload = comtrade._request(dict(params))  # type: ignore[attr-defined]
+        data = payload.get("data") if isinstance(payload, dict) else None
+        count = payload.get("count") if isinstance(payload, dict) else None
+        if count is None and isinstance(data, list):
+            count = len(data)
+        response = {
+            "endpoint": endpoint,
+            "debug_url": debug_url,
+            "params": params,
+            "has_key": bool(os.getenv("COMTRADE_KEY")),
+            "statusCode": payload.get("statusCode") if isinstance(payload, dict) else None,
+            "count": count,
+            "validation": payload.get("validation") if isinstance(payload, dict) else None,
+            "error": payload.get("error") if isinstance(payload, dict) else None,
+            "data_head": (data[:3] if isinstance(data, list) else None),
+            "source": ADMIN_SOURCE,
+            "last_updated": datetime.now(timezone.utc).isoformat(),
+        }
+        return response
+    except Exception as exc:
+        LOGGER.exception("Comtrade probe failed")
+        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=f"Probe failed: {str(exc)}")
