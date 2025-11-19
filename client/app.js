@@ -431,17 +431,17 @@ function handleCommunitySubmit(event) {
   event.preventDefault();
   try {
     const form = event.target;
-    const entry = {
+  const entry = {
       name: form.name.value?.trim(),
       category: form.category.value,
       location: form.location?.value?.trim() || '',
       notes: form.notes?.value?.trim() || '',
     };
     if (!entry.name || !entry.category) return;
-    state.community.unshift(entry);
-    persistJSON('bfi_registry', state.community);
+  state.community.unshift(entry);
+  persistJSON('bfi_registry', state.community);
     form.reset();
-    renderCommunity();
+  renderCommunity();
     showToast('Added to registry');
   } catch (e) {
     console.error(e);
@@ -461,7 +461,7 @@ function renderCommunity() {
       <strong style="display:block; font-family: 'Cinzel'">${entry.name}</strong>
       <span class="meta" style="font-size: 0.8rem; color: var(--text-gold); text-transform: uppercase;">${entry.category}${entry.location ? ' • ' + entry.location : ''}</span>
       ${entry.notes ? `<p class="meta-serif" style="margin:0.25rem 0 0">${entry.notes}</p>` : ''}
-    </li>
+      </li>
   `).join('');
 }
 
@@ -469,10 +469,10 @@ function renderCommunity() {
 function initTheme() {
   try {
     const saved = localStorage.getItem('theme'); // 'light' | 'dark' | null
-    if (saved === 'dark' || saved === 'light') {
-      document.documentElement.setAttribute('data-theme', saved);
+    if (saved === 'dark') {
+      document.documentElement.setAttribute('data-theme', 'dark');
     } else {
-      document.documentElement.removeAttribute('data-theme'); // fall back to system
+      document.documentElement.removeAttribute('data-theme'); // light/system fallback
     }
     refreshThemeToggleIcon();
   } catch (_) {}
@@ -481,9 +481,13 @@ function initTheme() {
 function toggleTheme() {
   const html = document.documentElement;
   const current = html.getAttribute('data-theme');
-  const next = current === 'dark' ? 'light' : 'dark';
-  html.setAttribute('data-theme', next);
-  localStorage.setItem('theme', next);
+  if (current === 'dark') {
+    html.removeAttribute('data-theme');       // revert to light/system
+    localStorage.setItem('theme', 'light');   // record preference as light (no override)
+  } else {
+    html.setAttribute('data-theme', 'dark');  // force dark
+    localStorage.setItem('theme', 'dark');
+  }
   refreshThemeToggleIcon();
 }
 
