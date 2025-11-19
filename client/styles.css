@@ -59,6 +59,28 @@ html[data-theme="dark"] {
   --filter-svg: invert(1);
 }
 
+/* Force Light Theme (overrides system dark) */
+html[data-theme="light"] {
+  --bg-body: #fcfbf9;
+  --bg-panel: #ffffff;
+  --bg-subtle: #f5f2ed;
+  --text-main: #1a1a1a;
+  --text-muted: #5d5d5d;
+  --text-gold: #9f803e;
+  --accent-gold: #d4af37;
+  --accent-gold-dim: #aa8c2c;
+  --accent-blue: #2c3e50;
+  --accent-alert: #8b0000;
+  --border-light: #e6e1d8;
+  --border-strong: #d1c7b7;
+  --frame-bg: #ffffff;
+  --drawer-bg: #ffffff;
+  --toast-bg: #1a1a1a;
+  --toast-text: #ffffff;
+  --svg-opacity: 0.15;
+  --filter-svg: none;
+}
+
 /* System dark theme (fallback if no manual selection) */
 @media (prefers-color-scheme: dark) {
   :root {
@@ -109,12 +131,12 @@ h2.section-title.small { font-size: 0.9rem; border-bottom: none; margin-bottom: 
 .topbar {
   height: var(--header-height);
   display: flex; justify-content: space-between; align-items: center;
-  padding: 0 2rem; background: rgba(252, 251, 249, 0.95);
+  padding: 0 2rem; background: var(--bg-panel);
   border-bottom: 1px solid var(--border-light);
   position: sticky; top: 0; z-index: 100;
   backdrop-filter: blur(10px);
 }
-@media (prefers-color-scheme: dark) { .topbar { background: rgba(18, 18, 18, 0.95); } }
+/* No media override needed: uses variables via data-theme */
 
 .brand { font-family: var(--font-brand); display: flex; align-items: center; gap: 0.8rem; font-size: 1.1rem; color: var(--text-main); text-transform: uppercase; }
 .brand small { display: block; font-family: var(--font-body); font-size: 0.6rem; color: var(--text-gold); letter-spacing: 0.1em; }
