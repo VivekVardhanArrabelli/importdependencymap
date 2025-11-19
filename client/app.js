@@ -8,6 +8,7 @@ const state = {
   community: [],
 };
 
+// Neoclassical Formatters (Standardized)
 const numberFormatter = new Intl.NumberFormat('en-IN', {
   maximumFractionDigits: 2,
 });
@@ -24,16 +25,22 @@ const inrFormatter = new Intl.NumberFormat('en-IN', {
   maximumFractionDigits: 0,
 });
 
+// Color Palette for Charts (Gold/Slate Theme)
+const CHART_COLORS = {
+  primary: '#d4af37',   // Gold
+  secondary: '#2c3e50', // Slate
+  accent: '#8b0000',    // Red/Alert
+  neutral: '#e6e1d8',   // Stone
+  palette: ['#d4af37', '#2c3e50', '#5d5d5d', '#aa8c2c', '#1a1a1a']
+};
+
 document.addEventListener('DOMContentLoaded', () => {
   document.getElementById('footerYear').textContent = new Date().getFullYear();
-  // Clear previously persisted filters/community (no longer persisted by design)
   try {
     localStorage.removeItem('bfi_filters');
     localStorage.removeItem('bfi_registry');
-  } catch (err) {
-    // ignore storage errors
-  }
-  // Reset form defaults to placeholders so old typed values don't persist across deploys
+  } catch (err) {}
+
   try {
     const ids = ['caseUnits','casePrice','caseReplacement','caseCapex','caseOpex'];
     ids.forEach((id) => {
@@ -41,12 +48,12 @@ document.addEventListener('DOMContentLoaded', () => {
       if (el) el.value = '';
     });
   } catch (_) {}
+  
   wireEvents();
   loadProducts();
   renderCommunity();
+  renderWatchlist(); // Render initial empty watchlist
   document.addEventListener('keydown', handleHotkeys);
-
-
 });
 
 function wireEvents() {
@@ -57,15 +64,11 @@ function wireEvents() {
   document.getElementById('compareForm').addEventListener('submit', handleCompareSubmit);
   document.getElementById('communityForm').addEventListener('submit', handleCommunitySubmit);
   document.getElementById('search').addEventListener('input', () => renderCards(filterProducts(state.products)));
-
-  // Do not persist filters anymore
-
 }
 
 async function loadProducts(force = false) {
   try {
-
-    setStatus('Loading products…', true);
+    setStatus('Acquiring Data…', true);
     renderSkeletonCards();
 
     const params = buildQuery();
@@ -80,14 +83,13 @@ async function loadProducts(force = false) {
     renderAlerts(state.products);
     populateCompareOptions(state.products);
 
-    setStatus(`Source: ${data.source ?? '—'} • Updated ${state.lastFetched ?? '—'}`);
+    setStatus('Ready');
     animateCounters();
-    showToast(`Loaded ${state.products.length} items`);
+    showToast(`Index updated: ${state.products.length} commodities`);
   } catch (error) {
     console.error(error);
-    setStatus('Unable to load products — check API status.');
-    showToast('Load failed. Check API status.', 'error');
-
+    setStatus('Connection Error');
+    showToast('Unable to fetch data', 'error');
   }
 }
 
@@ -129,10 +131,13 @@ function renderStats(items) {
     : 0;
   const alertCount = computeAlerts(items).length;
 
-  document.getElementById('statTotalProducts').textContent = numberFormatter.format(total);
-  document.getElementById('statImportUsd').textContent = usdFormatter.format(importUsd);
-  document.getElementById('statAvgScore').textContent = avgScore.toFixed(2);
-  document.getElementById('statAlerts').textContent = alertCount;
+  // Animation handled by countUp in animateCounters, just setting text here as fallback
+  if (!document.getElementById('statTotalProducts').textContent.match(/\d/)) {
+      document.getElementById('statTotalProducts').textContent = numberFormatter.format(total);
+      document.getElementById('statImportUsd').textContent = usdFormatter.format(importUsd);
+      document.getElementById('statAvgScore').textContent = avgScore.toFixed(2);
+      document.getElementById('statAlerts').textContent = alertCount;
+  }
 }
 
 function renderCards(items) {
@@ -141,7 +146,7 @@ function renderCards(items) {
   container.innerHTML = '';
 
   if (!filtered.length) {
-    container.innerHTML = '<p class="meta">No results match the current filters.</p>';
+    container.innerHTML = '<p class="meta-serif">No commodities found matching criteria.</p>';
     return;
   }
 
@@ -151,45 +156,21 @@ function renderCards(items) {
     card.innerHTML = `
       <h3>
         <span>${item.title}</span>
-        <span class="meta">${item.hs_code}</span>
+        <span>${item.hs_code}</span>
       </h3>
       <div class="chips">${(item.sectors || []).map((s) => `<span class="chip">${s}</span>`).join('')}</div>
-      <div class="meta">12m imports: ${formatValue(item.last_12m_value_usd, 'usd')}</div>
-      <div class="meta">Opportunity score: ${(item.opportunity_score ?? 0).toFixed(2)}</div>
-      <div class="meta">YoY change: ${formatPercentage(item.reduction_pct)}</div>
-
-      <div>
-        <button class="btn outline" type="button" data-watch="${item.hs_code}">Watch</button>
+      <div class="meta">12m Imports: ${formatValue(item.last_12m_value_usd, 'usd')}</div>
+      <div class="meta">Opp. Score: ${(item.opportunity_score ?? 0).toFixed(2)}</div>
+      
+      <div style="margin-top: 1rem; display: flex; justify-content: flex-end;">
+        <button class="btn text-only" type="button" data-hs="${item.hs_code}">Analyze &rarr;</button>
       </div>
     `;
-    card.tabIndex = 0;
-    card.setAttribute('role', 'button');
-    card.setAttribute('aria-label', `${item.title} ${item.hs_code}`);
     card.addEventListener('click', () => loadDetail(item.hs_code));
-    card.addEventListener('keydown', (e) => {
-      if (e.key === 'Enter' || e.key === ' ') {
-        e.preventDefault();
-        loadDetail(item.hs_code);
-      }
-    });
-
     container.appendChild(card);
   });
 
-  document.getElementById('resultsMeta').textContent = `${filtered.length} items shown`;
-
-
-  container.querySelectorAll('button[data-watch]').forEach((btn) => {
-    btn.addEventListener('click', (e) => {
-      e.stopPropagation();
-      const hs = btn.getAttribute('data-watch');
-      fetch(`/api/products/${hs}`).then((res) => res.json()).then((detail) => {
-        addToWatchlist(detail);
-        showToast(`Added ${detail.product.title} to watchlist`);
-      });
-    });
-  });
-
+  document.getElementById('resultsMeta').textContent = `${filtered.length} records`;
 }
 
 async function loadDetail(hsCode) {
@@ -198,9 +179,15 @@ async function loadDetail(hsCode) {
     if (!response.ok) throw new Error(`Failed to load detail for ${hsCode}`);
     const data = await response.json();
     state.selected = data;
+    
+    const detailPanel = document.getElementById('detail');
+    detailPanel.classList.remove('hidden');
+    
     updateDetail(data);
     updateBusinessCase(data);
     updateWatchButton();
+    
+    detailPanel.scrollIntoView({ behavior: 'smooth', block: 'start' });
   } catch (error) {
     console.error(error);
   }
@@ -208,20 +195,15 @@ async function loadDetail(hsCode) {
 
 function updateDetail(detail) {
   const product = detail.product;
-  document.getElementById('detailTitle').textContent = `${product.title} (${product.hs_code})`;
-
-  document.getElementById('detailTitle').focus();
-  document.getElementById('detail').scrollIntoView({ behavior: 'smooth', block: 'start' });
-
+  document.getElementById('detailTitle').textContent = `${product.title} — ${product.hs_code}`;
 
   const snapshot = document.getElementById('detailSnapshot');
   snapshot.innerHTML = `
-    <li>Opportunity score: ${(product.opportunity_score ?? 0).toFixed(2)}</li>
-    <li>12m imports (USD): ${formatValue(product.last_12m_value_usd, 'usd')}</li>
-    <li>12m imports (INR): ${formatValue(findLatestValue(detail.timeseries, 'value_inr'), 'inr')}</li>
-    <li>YoY change: ${formatPercentage(detail.progress?.reduction_pct)}</li>
-    <li>Supplier HHI: ${(detail.progress?.hhi_current ?? 0).toFixed(2)}</li>
-    <li>Capex (USD): ${formatRange(product.capex_min, product.capex_max)}</li>
+    <li><span>Opportunity Score</span> <strong>${(product.opportunity_score ?? 0).toFixed(2)}</strong></li>
+    <li><span>Annual Imports (USD)</span> <strong>${formatValue(product.last_12m_value_usd, 'usd')}</strong></li>
+    <li><span>YoY Variation</span> <strong>${formatPercentage(detail.progress?.reduction_pct)}</strong></li>
+    <li><span>Market Concentration (HHI)</span> <strong>${(detail.progress?.hhi_current ?? 0).toFixed(2)}</strong></li>
+    <li><span>Est. Capital Req.</span> <strong>${formatRange(product.capex_min, product.capex_max)}</strong></li>
   `;
 
   renderTrendChart(detail.timeseries);
@@ -233,42 +215,48 @@ function renderTrendChart(timeseries = []) {
   const ctx = document.getElementById('trendChart');
   const labels = timeseries.map((d) => `${d.year}-${String(d.month).padStart(2, '0')}`);
   const usdValues = timeseries.map((d) => d.value_usd || 0);
-  const inrValues = timeseries.map((d) => d.value_inr || 0);
 
   if (state.trendChart) state.trendChart.destroy();
+  
+  // Neoclassical Chart Styling
+  Chart.defaults.font.family = "'Tenor Sans', sans-serif";
+  Chart.defaults.color = '#5d5d5d';
+  
   state.trendChart = new Chart(ctx, {
     type: 'line',
     data: {
       labels,
-      datasets: [
-        {
-          label: 'Monthly imports (USD)',
-          data: usdValues,
-
-          borderColor: '#f97316',
-          backgroundColor: 'rgba(249, 115, 22, 0.18)',
-
-          tension: 0.3,
-          fill: true,
-        },
-        {
-          label: 'Monthly imports (INR)',
-          data: inrValues,
-
-          borderColor: '#16a34a',
-          backgroundColor: 'rgba(22, 163, 74, 0.18)',
-
-          tension: 0.25,
-          fill: true,
-        },
-      ],
+      datasets: [{
+        label: 'Import Value (USD)',
+        data: usdValues,
+        borderColor: CHART_COLORS.primary,
+        backgroundColor: 'rgba(212, 175, 55, 0.05)', // Gold wash
+        borderWidth: 2,
+        tension: 0.4,
+        pointRadius: 0,
+        pointHoverRadius: 6,
+        fill: true,
+      }],
     },
     options: {
+      responsive: true,
+      maintainAspectRatio: false,
       plugins: {
-        legend: { display: true },
+        legend: { display: false },
+        tooltip: {
+          backgroundColor: '#1a1a1a',
+          titleFont: { family: 'Cinzel' },
+          padding: 12,
+          displayColors: false
+        }
       },
       scales: {
-        y: { beginAtZero: true },
+        x: { grid: { display: false } },
+        y: { 
+          beginAtZero: true,
+          grid: { color: '#e6e1d8' },
+          border: { display: false }
+        },
       },
     },
   });
@@ -279,22 +267,24 @@ function renderPartnerChart(partners = []) {
   const labels = partners.map((p) => p.partner_country || 'Unknown');
   const values = partners.map((p) => p.value_usd || 0);
   if (state.partnerChart) state.partnerChart.destroy();
+  
   state.partnerChart = new Chart(ctx, {
     type: 'doughnut',
     data: {
       labels,
-      datasets: [
-        {
-          data: values,
-
-          backgroundColor: ['#2563eb', '#16a34a', '#f97316', '#0ea5e9', '#64748b'],
-
-        },
-      ],
+      datasets: [{
+        data: values,
+        backgroundColor: CHART_COLORS.palette,
+        borderWidth: 0,
+        hoverOffset: 4
+      }],
     },
     options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      cutout: '70%',
       plugins: {
-        legend: { position: 'bottom' },
+        legend: { display: false },
       },
     },
   });
@@ -302,20 +292,22 @@ function renderPartnerChart(partners = []) {
 
 function renderPartnerList(partners = []) {
   const list = document.getElementById('partnerList');
-  list.innerHTML = partners
-    .map((p) => `<li>${p.partner_country || 'Unknown'} — ${formatValue(p.value_usd, 'usd')}</li>`)
+  // Take top 5 only for the list to keep UI clean
+  list.innerHTML = partners.slice(0, 5)
+    .map((p) => `<li><span>${p.partner_country || 'Unknown'}</span> <span>${formatValue(p.value_usd, 'usd')}</span></li>`)
     .join('');
 }
 
 function renderAlerts(items) {
   const alerts = computeAlerts(items);
   const list = document.getElementById('alertsList');
-  list.innerHTML = alerts
+  list.innerHTML = alerts.slice(0, 10) // Limit to 10 to fit sidebar
     .map(
       (alert) => `
       <li>
-        <strong>${alert.title} (${alert.hs_code})</strong><br />
-        Opportunity: ${(alert.opportunity_score ?? 0).toFixed(2)} • YoY change: ${formatPercentage(alert.reduction_pct)} • HHI: ${(alert.hhi_current ?? 0).toFixed(2)}
+        <strong>${alert.hs_code}</strong>
+        <div class="meta" style="font-size: 0.8rem; color: var(--text-main)">${alert.title}</div>
+        <div class="meta">Score: ${(alert.opportunity_score ?? 0).toFixed(2)}</div>
       </li>
     `,
     )
@@ -345,7 +337,7 @@ function updateBusinessCase(detail) {
 function handleBusinessCaseSubmit(event) {
   event.preventDefault();
   if (!state.selected) {
-    alert('Select a product first.');
+    showToast('Please select a product first', 'error');
     return;
   }
   const product = state.selected.product;
@@ -360,24 +352,24 @@ function handleBusinessCaseSubmit(event) {
   const revenue = units * price * (replacement / 100);
   const grossMargin = Math.max(revenue - opex, 0);
   const paybackMonths = grossMargin > 0 ? capex / grossMargin : Infinity;
-  const paybackLabel = Number.isFinite(paybackMonths) ? `${paybackMonths.toFixed(1)} months` : 'Not reachable';
+  const paybackLabel = Number.isFinite(paybackMonths) ? `${paybackMonths.toFixed(1)} months` : 'N/A';
 
   const container = document.getElementById('businessCaseResults');
   container.innerHTML = `
     <div class="result-card">
-      <h4>Monthly revenue</h4>
+      <h4>Monthly Revenue</h4>
       <p>${usdFormatter.format(revenue)}</p>
     </div>
     <div class="result-card">
-      <h4>Gross margin (after Opex)</h4>
+      <h4>Gross Margin</h4>
       <p>${usdFormatter.format(grossMargin)}</p>
     </div>
     <div class="result-card">
-      <h4>Estimated Capex</h4>
+      <h4>Est. Capex</h4>
       <p>${usdFormatter.format(capex)}</p>
     </div>
     <div class="result-card">
-      <h4>Payback horizon</h4>
+      <h4>Payback</h4>
       <p>${paybackLabel}</p>
     </div>
   `;
@@ -388,7 +380,7 @@ async function handleCompareSubmit(event) {
   const hsA = document.getElementById('compareA').value;
   const hsB = document.getElementById('compareB').value;
   if (!hsA || !hsB || hsA === hsB) {
-    alert('Select two distinct HS codes to compare.');
+    showToast('Select two distinct items to compare', 'error');
     return;
   }
   try {
@@ -399,7 +391,7 @@ async function handleCompareSubmit(event) {
     renderCompare(detailA, detailB);
   } catch (error) {
     console.error(error);
-    alert('Unable to fetch comparison data.');
+    showToast('Comparison failed', 'error');
   }
 }
 
@@ -409,15 +401,13 @@ function renderCompare(a, b) {
     .map((detail) => {
       const product = detail.product;
       return `
-        <div class="compare-card">
+        <div class="compare-card" style="border: 1px solid var(--border-light); padding: 1rem; background: #fff;">
           <h3>${product.title}</h3>
-          <p class="meta">${product.hs_code}</p>
-          <ul class="meta-list">
-            <li>Opportunity score: ${(product.opportunity_score ?? 0).toFixed(2)}</li>
-            <li>12m imports (USD): ${formatValue(product.last_12m_value_usd, 'usd')}</li>
-            <li>YoY change: ${formatPercentage(detail.progress?.reduction_pct)}</li>
-            <li>Supplier concentration (HHI): ${(detail.progress?.hhi_current ?? 0).toFixed(2)}</li>
-            <li>CAPEX (USD): ${formatRange(product.capex_min, product.capex_max)}</li>
+          <p class="meta-serif">${product.hs_code}</p>
+          <ul class="serif-list" style="list-style: none; padding: 0;">
+            <li><span>Score</span> <span>${(product.opportunity_score ?? 0).toFixed(2)}</span></li>
+            <li><span>Imports</span> <span>${formatValue(product.last_12m_value_usd, 'usd')}</span></li>
+            <li><span>HHI</span> <span>${(detail.progress?.hhi_current ?? 0).toFixed(2)}</span></li>
           </ul>
         </div>
       `;
@@ -431,8 +421,8 @@ function populateCompareOptions(items) {
   const options = items
     .map((item) => `<option value="${item.hs_code}">${item.hs_code} — ${item.title}</option>`)
     .join('');
-  selectA.innerHTML = `<option value="">Select HS code</option>${options}`;
-  selectB.innerHTML = `<option value="">Select HS code</option>${options}`;
+  selectA.innerHTML = `<option value="">Item A</option>${options}`;
+  selectB.innerHTML = `<option value="">Item B</option>${options}`;
 }
 
 function updateWatchButton() {
@@ -444,7 +434,7 @@ function updateWatchButton() {
   button.disabled = false;
   const hs = state.selected.product.hs_code;
   const exists = state.watchlist.some((item) => item.hs_code === hs);
-  button.textContent = exists ? 'Remove from watchlist' : 'Add to watchlist';
+  button.textContent = exists ? 'Remove Watchlist' : 'Add to Watchlist';
   button.onclick = exists ? () => removeFromWatchlist(hs) : () => addToWatchlist(state.selected);
   renderWatchlist();
 }
@@ -457,6 +447,7 @@ function addToWatchlist(detail) {
   if (!state.watchlist.some((item) => item.hs_code === entry.hs_code)) {
     state.watchlist.push(entry);
     persistJSON('bfi_watchlist', state.watchlist);
+    showToast('Added to watchlist');
   }
   updateWatchButton();
 }
@@ -471,32 +462,20 @@ async function renderWatchlist() {
   const tbody = document.querySelector('#watchlistTable tbody');
   tbody.innerHTML = '';
   if (!state.watchlist.length) {
-    tbody.innerHTML = '<tr><td colspan="6" class="meta">Empty watchlist</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="3" class="meta-serif" style="text-align:center; padding: 2rem;">Watchlist Empty</td></tr>';
     return;
   }
+  // Render stored items immediately, then update dynamically if needed
+  // For speed, just rendering what we have in state for now, or minimal fetch
   for (const item of state.watchlist) {
-    try {
-      const detail = await fetch(`/api/products/${item.hs_code}`).then((res) => res.json());
       const tr = document.createElement('tr');
-      const opportunity = detail.product.opportunity_score ?? 0;
-      const yoy = detail.progress?.reduction_pct ?? 0;
-      const alerts = [];
-      if (opportunity >= 0.7) alerts.push('High opportunity');
-      if (yoy < -0.05) alerts.push('Import spike');
-      if ((detail.progress?.hhi_current ?? 0) > 0.6) alerts.push('Supplier concentration');
       tr.innerHTML = `
-        <td>${detail.product.hs_code}</td>
-        <td>${detail.product.title}</td>
-        <td>${opportunity.toFixed(2)}</td>
-        <td>${formatPercentage(yoy)}</td>
-        <td>${alerts.join(', ') || '—'}</td>
-        <td><button class="btn outline" type="button" data-hs="${detail.product.hs_code}">Remove</button></td>
+        <td><strong>${item.hs_code}</strong></td>
+        <td class="meta-serif">${item.title.substring(0, 20)}…</td>
+        <td><button class="btn text-only" type="button" style="color: var(--accent-alert)">×</button></td>
       `;
-      tr.querySelector('button').addEventListener('click', () => removeFromWatchlist(detail.product.hs_code));
+      tr.querySelector('button').addEventListener('click', () => removeFromWatchlist(item.hs_code));
       tbody.appendChild(tr);
-    } catch (error) {
-      console.error(error);
-    }
   }
 }
 
@@ -518,16 +497,15 @@ function handleCommunitySubmit(event) {
 function renderCommunity() {
   const list = document.getElementById('communityList');
   if (!state.community.length) {
-    list.innerHTML = '<li class="meta">No community entries yet.</li>';
+    list.innerHTML = '<li class="meta-serif" style="padding: 1rem; color: var(--text-muted);">Registry Empty</li>';
     return;
   }
   list.innerHTML = state.community
     .map(
       (entry) => `
-      <li>
-        <strong>${entry.name}</strong><br />
-        <span class="meta">${entry.category}${entry.location ? ' • ' + entry.location : ''}</span>
-        ${entry.notes ? `<p class="meta">${entry.notes}</p>` : ''}
+      <li style="padding: 0.8rem 0; border-bottom: 1px solid var(--border-light);">
+        <strong style="display:block; font-family: 'Cinzel'">${entry.name}</strong>
+        <span class="meta" style="font-size: 0.8rem; color: var(--text-gold); text-transform: uppercase;">${entry.category}</span>
       </li>
     `,
     )
@@ -535,6 +513,7 @@ function renderCommunity() {
 }
 
 function downloadCsv() {
+  // Same logic, maybe different filename
   const rows = [
     ['hs_code', 'title', 'last_12m_usd', 'opportunity_score', 'reduction_pct', 'sectors'],
     ...state.products.map((item) => [
@@ -551,53 +530,70 @@ function downloadCsv() {
   const url = URL.createObjectURL(blob);
   const link = document.createElement('a');
   link.href = url;
-  link.download = `build-for-india-${new Date().toISOString().slice(0, 10)}.csv`;
+  link.download = `bfi-report-${new Date().toISOString().slice(0, 10)}.csv`;
   link.click();
   URL.revokeObjectURL(url);
 }
 
-
 function setStatus(message, busy = false) {
   const el = document.getElementById('status');
   el.textContent = message;
-  el.setAttribute('aria-busy', busy ? 'true' : 'false');
 }
 
-function renderSkeletonCards(count = 8) {
+function renderSkeletonCards(count = 6) {
   const container = document.getElementById('cards');
   container.innerHTML = '';
-  const grid = document.createElement('div');
-  grid.className = 'skeleton-grid';
   for (let i = 0; i < count; i++) {
     const card = document.createElement('div');
-    card.className = 'skeleton-card';
-    card.innerHTML = `
-      <div class="skeleton-line lg"></div>
-      <div class="skeleton-line md"></div>
-      <div class="skeleton-line sm"></div>
-    `;
-    grid.appendChild(card);
+    card.className = 'card skeleton-card';
+    container.appendChild(card);
   }
-  container.appendChild(grid);
 }
 
 function animateCounters() {
   const toAnimate = [
     ['statTotalProducts', state.products.length],
+    ['statImportUsd', state.products.reduce((acc, item) => acc + (item.last_12m_value_usd || 0), 0)],
     ['statAlerts', computeAlerts(state.products).length],
   ];
-  toAnimate.forEach(([id, target]) => countUp(id, Number(target) || 0, 600));
+  
+  // Calculate average separately as it's a float
+  const avg = state.products.length ? state.products.reduce((acc, item) => acc + (item.opportunity_score || 0), 0) / state.products.length : 0;
+  
+  toAnimate.forEach(([id, target]) => countUp(id, target));
+  
+  // Animate Average Score (Float)
+  const el = document.getElementById('statAvgScore');
+  let start = 0;
+  const duration = 1000;
+  const startTime = Date.now();
+  function tick() {
+    const progress = Math.min(1, (Date.now() - startTime) / duration);
+    const value = start + (avg - start) * progress;
+    el.textContent = value.toFixed(2);
+    if (progress < 1) requestAnimationFrame(tick);
+  }
+  requestAnimationFrame(tick);
 }
 
-function countUp(elementId, target, duration = 800) {
+function countUp(elementId, target, duration = 1000) {
   const el = document.getElementById(elementId);
   if (!el) return;
   const start = 0;
   const startTime = Date.now();
   function tick() {
     const progress = Math.min(1, (Date.now() - startTime) / duration);
-    const value = Math.floor(start + (target - start) * progress);
-    el.textContent = new Intl.NumberFormat('en-IN').format(value);
+    // Cubic ease out
+    const ease = 1 - Math.pow(1 - progress, 3);
+    const value = Math.floor(start + (target - start) * ease);
+    
+    // Format based on ID
+    if (elementId === 'statImportUsd') {
+        el.textContent = usdFormatter.format(value);
+    } else {
+        el.textContent = numberFormatter.format(value);
+    }
+    
     if (progress < 1) requestAnimationFrame(tick);
   }
   requestAnimationFrame(tick);
@@ -605,25 +601,23 @@ function countUp(elementId, target, duration = 800) {
 
 function showToast(message, type = 'info') {
   const el = document.getElementById('toast');
-  if (!el) return;
   el.textContent = message;
   el.hidden = false;
   el.classList.add('show');
+  // Dynamic background for error
+  if (type === 'error') el.style.backgroundColor = '#8b0000';
+  else el.style.backgroundColor = '#1a1a1a';
+  
   setTimeout(() => {
     el.classList.remove('show');
-    el.hidden = true;
-  }, 2200);
+    setTimeout(() => { el.hidden = true; }, 400);
+  }, 2500);
 }
 
 function handleHotkeys(e) {
   if (e.target && ['INPUT','SELECT','TEXTAREA'].includes(e.target.tagName)) return;
-  if (e.key.toLowerCase() === 'f') {
-    document.getElementById('search').focus();
-  } else if (e.key.toLowerCase() === 'r') {
-    document.getElementById('refreshBtn').click();
-  }
+  if (e.key.toLowerCase() === 'f') document.getElementById('search').focus();
 }
-
 
 function formatValue(value, mode = 'usd') {
   if (value === null || value === undefined) return '—';
@@ -663,9 +657,6 @@ function restoreJSON(key, fallback) {
     const raw = localStorage.getItem(key);
     return raw ? JSON.parse(raw) : fallback;
   } catch (error) {
-    console.warn(`Failed to parse ${key} from localStorage`, error);
     return fallback;
   }
-
 }
-

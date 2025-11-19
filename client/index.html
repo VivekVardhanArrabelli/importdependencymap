@@ -7,14 +7,14 @@
     <meta http-equiv="Pragma" content="no-cache" />
     <meta http-equiv="Expires" content="0" />
     <meta name="description" content="Track India's import dependencies, identify manufacturing opportunities, and build domestic capability." />
-    <title>Build for India Imports Intelligence</title>
-    <link rel="preconnect" href="https://fonts.googleapis.com" />
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <link
-      href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap"
-      rel="stylesheet"
-    />
-    <link rel="stylesheet" href="/static/styles.css?v=3" />
+    <title>Build for India — Import Intelligence</title>
+    
+    <!-- Neoclassical Typography -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@400;500;700&family=Playfair+Display:ital,wght@0,400;0,600;0,700;1,400&family=Tenor+Sans&display=swap" rel="stylesheet">
+    
+    <link rel="stylesheet" href="/static/styles.css?v=4" />
   </head>
   <body>
 
@@ -22,16 +22,16 @@
 
     <header class="topbar">
       <div class="brand">
-        <span class="brand__logo">🇮🇳</span>
+        <span class="brand__logo">🏛️</span>
         <span>
           Build for India
-          <small>Import Dependency Intelligence</small>
+          <small>Import Intelligence</small>
         </span>
       </div>
 
       <nav aria-label="Primary">
         <a href="#dashboard">Dashboard</a>
-        <a href="#detail">Product Detail</a>
+        <a href="#detail">Analysis</a>
         <a href="#business-case">Business Case</a>
         <a href="#compare">Compare</a>
         <a href="#watchlist">Watchlist</a>
@@ -41,236 +41,209 @@
 
     <main>
       <section class="hero" id="dashboard">
-        <div class="hero__copy">
-          <h1>Prioritise Make-in-India opportunities</h1>
-          <p>
-            Track high-value import dependencies, partner concentration, and the effort required to localise manufacturing across HS codes.
+        <div class="hero__content">
+          <h1 class="hero__title">Domestic<br/>Sovereignty</h1>
+          <p class="hero__subtitle">
+            Architecting India's manufacturing independence through data-driven import substitution.
           </p>
           <div class="hero__actions">
-            <button id="refreshBtn" class="btn primary">Refresh Data</button>
-            <button id="downloadCsvBtn" class="btn outline">Download CSV</button>
+            <button id="refreshBtn" class="btn primary">
+              <span>Refresh Intelligence</span>
+            </button>
+            <button id="downloadCsvBtn" class="btn outline">Download Report</button>
           </div>
         </div>
-        <div class="stats" id="headlineStats">
+        
+        <div class="stats-grid" id="headlineStats">
           <div class="stat-card">
-            <h3>Total HS codes</h3>
+            <h3>Tracking</h3>
             <p id="statTotalProducts">—</p>
+            <span class="stat-label">HS Codes</span>
           </div>
           <div class="stat-card">
-            <h3>12m import value (USD)</h3>
+            <h3>Volume</h3>
             <p id="statImportUsd">—</p>
+            <span class="stat-label">12m Import Value</span>
           </div>
           <div class="stat-card">
-            <h3>Average opportunity score</h3>
+            <h3>Opportunity</h3>
             <p id="statAvgScore">—</p>
+            <span class="stat-label">Avg. Score</span>
           </div>
-          <div class="stat-card">
-            <h3>High-alert items</h3>
+          <div class="stat-card alert">
+            <h3>Critical</h3>
             <p id="statAlerts">—</p>
+            <span class="stat-label">High Alerts</span>
           </div>
         </div>
       </section>
 
-      <section class="layout__filters">
-        <aside class="panel filters" aria-labelledby="filtersTitle">
-          <h2 id="filtersTitle">Filter &amp; Search</h2>
+      <section class="layout-columns">
+        
+        <aside class="sidebar">
+          <div class="panel filters sticky">
+            <h2 class="section-title">Refine</h2>
+            
+            <div class="status-indicator" id="status" role="status" aria-live="polite">Ready</div>
 
-          <div class="status" id="status" role="status" aria-live="polite" aria-busy="false">Loading…</div>
-
-          <label for="search">Search</label>
-          <input id="search" type="text" placeholder="Search products (e.g. lithium batteries)" />
-
-          <label for="sectors">Sectors (comma separated)</label>
-          <input id="sectors" type="text" placeholder="electronics,industrial" />
-
-          <div class="inline">
-            <div>
-              <label for="minCapex">Min Capex (USD)</label>
-              <input id="minCapex" type="number" min="0" step="10000" />
+            <div class="input-group">
+              <label for="search">Search</label>
+              <input id="search" type="text" placeholder="Search commodities..." />
             </div>
-            <div>
-              <label for="maxCapex">Max Capex (USD)</label>
-              <input id="maxCapex" type="number" min="0" step="10000" />
+
+            <div class="input-group">
+              <label for="sectors">Sectors</label>
+              <input id="sectors" type="text" placeholder="electronics, industrial..." />
             </div>
+
+            <div class="input-group-row">
+              <div>
+                <label>Min Capex</label>
+                <input id="minCapex" type="number" min="0" step="10000" placeholder="0" />
+              </div>
+              <div>
+                <label>Max Capex</label>
+                <input id="maxCapex" type="number" min="0" step="10000" placeholder="∞" />
+              </div>
+            </div>
+
+            <div class="input-group">
+              <label for="sort">Ordering</label>
+              <select id="sort">
+                <option value="opportunity">Opportunity Score</option>
+                <option value="progress">Import Reduction</option>
+                <option value="value">Import Value</option>
+              </select>
+            </div>
+
+            <button id="loadBtn" class="btn full">Apply Filters</button>
           </div>
-
-          <label for="sort">Sort by</label>
-          <select id="sort">
-            <option value="opportunity">Opportunity score</option>
-            <option value="progress">Reduction %</option>
-            <option value="value">Import value</option>
-          </select>
-
-          <button id="loadBtn" class="btn primary">Apply filters</button>
         </aside>
 
-        <section class="panel results" aria-labelledby="resultsTitle">
-          <div class="results__header">
-            <h2 id="resultsTitle">Top Imports</h2>
-            <span class="meta" id="resultsMeta">—</span>
-          </div>
-          <div class="cards" id="cards"></div>
-        </section>
-
-        <section class="panel alerts" id="alertsPanel" aria-labelledby="alertsTitle">
-          <div class="alerts__header">
-            <h2 id="alertsTitle">Alerts &amp; Watchlist Signals</h2>
-            <p class="meta">Triggered when YoY imports surge or supplier concentration is risky.</p>
-          </div>
-          <ul id="alertsList" class="alerts__list"></ul>
-        </section>
-      </section>
-
-      <section class="panel detail" id="detail" aria-labelledby="detailTitle">
-        <div class="detail__header">
-          <div>
-            <h2 id="detailTitle" tabindex="-1">Select a product to explore details</h2>
-            <p class="meta">
-              Opportunity score, partner distribution, CAPEX estimates, and localisation effort breakdown.
-            </p>
-          </div>
-          <button id="watchBtn" class="btn outline" disabled>Add to watchlist</button>
-        </div>
-        <div class="detail__grid">
-          <div class="detail__chart">
-            <canvas id="trendChart" height="300"></canvas>
-          </div>
-          <div class="detail__insights">
-            <div class="insight">
-              <h3>Opportunity Snapshot</h3>
-              <ul id="detailSnapshot"></ul>
+        <div class="main-content">
+          <div class="panel results">
+            <div class="panel-header">
+              <h2 class="section-title">Commodities</h2>
+              <span class="meta-serif" id="resultsMeta">—</span>
             </div>
-            <div class="insight">
-              <h3>Top partners</h3>
-              <canvas id="partnerChart" height="200"></canvas>
-              <ul id="partnerList" class="meta-list"></ul>
+            <div class="cards-grid" id="cards"></div>
+          </div>
+
+          <div class="panel detail hidden" id="detail">
+            <div class="panel-header">
+              <h2 id="detailTitle" class="section-title" tabindex="-1">Select a Product</h2>
+              <button id="watchBtn" class="btn text-only" disabled>Add to Watchlist</button>
+            </div>
+            
+            <div class="detail-layout">
+              <div class="chart-container frame">
+                <canvas id="trendChart"></canvas>
+              </div>
+              
+              <div class="insights-column">
+                <div class="insight-block">
+                  <h3>Metrics</h3>
+                  <ul id="detailSnapshot" class="serif-list"></ul>
+                </div>
+                <div class="insight-block">
+                  <h3>Origin</h3>
+                  <div class="chart-donut">
+                    <canvas id="partnerChart"></canvas>
+                  </div>
+                  <ul id="partnerList" class="partner-list"></ul>
+                </div>
+              </div>
             </div>
           </div>
+
+          <!-- Business Case Section -->
+          <div class="panel" id="business-case">
+            <h2 class="section-title">Feasibility Study</h2>
+            <form id="businessCaseForm" class="neoclassical-form" autocomplete="off">
+              <div class="form-row">
+                <label>Selected HS Code <input id="caseHs" type="text" readonly /></label>
+                <label>Target Output / Mo <input id="caseUnits" type="number" placeholder="1000" /></label>
+                <label>Avg. Price (USD) <input id="casePrice" type="number" placeholder="150" /></label>
+              </div>
+              <div class="form-row">
+                <label>Replacement % <input id="caseReplacement" type="number" placeholder="40" /></label>
+                <label>Est. Capex <input id="caseCapex" type="number" placeholder="Auto" /></label>
+                <label>Est. Opex / Mo <input id="caseOpex" type="number" placeholder="50000" /></label>
+              </div>
+              <button class="btn primary" type="submit">Generate Projection</button>
+            </form>
+            <div id="businessCaseResults" class="metrics-grid"></div>
+          </div>
+          
+          <!-- Compare Section -->
+          <div class="panel" id="compare">
+            <h2 class="section-title">Comparative Analysis</h2>
+            <form id="compareForm" class="compare-form">
+              <select id="compareA"></select>
+              <span class="vs">vs</span>
+              <select id="compareB"></select>
+              <button class="btn outline" type="submit">Analyze</button>
+            </form>
+            <div id="compareResults" class="compare-grid"></div>
+          </div>
+
         </div>
-      </section>
-
-      <section class="panel" id="business-case" aria-labelledby="businessCaseTitle">
-        <h2 id="businessCaseTitle">Business Case Generator</h2>
-        <form id="businessCaseForm" class="form-grid" autocomplete="off">
-          <label>
-            Selected HS code
-            <input id="caseHs" type="text" readonly placeholder="Select a product first" />
-          </label>
-          <label>
-            Target factory output (units / month)
-            <input id="caseUnits" type="number" min="0" step="100" placeholder="1000" autocomplete="off" />
-          </label>
-          <label>
-            Average selling price per unit (USD)
-            <input id="casePrice" type="number" min="0" step="1" placeholder="150" autocomplete="off" />
-          </label>
-          <label>
-            Import replacement goal (%)
-            <input id="caseReplacement" type="number" min="0" max="100" step="5" placeholder="40" autocomplete="off" />
-          </label>
-          <label>
-            Estimated Capex (USD)
-            <input id="caseCapex" type="number" min="0" step="10000" placeholder="Auto" />
-          </label>
-          <label>
-            Estimated Opex per month (USD)
-            <input id="caseOpex" type="number" min="0" step="1000" placeholder="50000" autocomplete="off" />
-          </label>
-          <label class="full">
-            <button class="btn primary" type="submit">Calculate</button>
-          </label>
-        </form>
-        <div class="business-case__results" id="businessCaseResults"></div>
-      </section>
-
-      <section class="panel" id="compare" aria-labelledby="compareTitle">
-        <h2 id="compareTitle">Compare HS Codes</h2>
-        <form id="compareForm" class="compare-form" autocomplete="off">
-          <div>
-            <label for="compareA">First HS code</label>
-            <select id="compareA"></select>
+        
+        <!-- Right Column: Alerts & Watchlist -->
+        <aside class="sidebar-right">
+          <div class="panel alerts" id="alertsPanel">
+            <h2 class="section-title small">Critical Signals</h2>
+            <ul id="alertsList" class="alerts-list"></ul>
           </div>
-          <div>
-            <label for="compareB">Second HS code</label>
-            <select id="compareB"></select>
+
+          <div class="panel watchlist" id="watchlist">
+            <h2 class="section-title small">Watchlist</h2>
+            <table class="compact-table" id="watchlistTable">
+              <thead>
+                <tr>
+                  <th>Code</th>
+                  <th>Metric</th>
+                  <th></th>
+                </tr>
+              </thead>
+              <tbody></tbody>
+            </table>
           </div>
-          <button class="btn outline" type="submit">Compare</button>
-        </form>
-        <div id="compareResults" class="compare-results"></div>
-      </section>
-
-
-      <section class="panel" id="watchlist" aria-labelledby="watchlistTitle">
-        <h2 id="watchlistTitle">Watchlist</h2>
-        <p class="meta">Monitor high-priority items. Stored locally in your browser.</p>
-        <table class="watchlist-table" id="watchlistTable">
-          <thead>
-            <tr>
-              <th>HS Code</th>
-              <th>Title</th>
-              <th>Opportunity</th>
-              <th>YoY Change</th>
-              <th>Alerts</th>
-              <th></th>
-            </tr>
-          </thead>
-          <tbody></tbody>
-        </table>
-      </section>
-
-      <section class="panel" id="community" aria-labelledby="communityTitle">
-        <h2 id="communityTitle">Community &amp; Supplier Registry</h2>
-        <div class="community-grid">
-          <form id="communityForm" class="form-grid">
-            <label>
-              Organisation / Contact
-              <input name="name" type="text" required />
-            </label>
-            <label>
-              Category
-              <select name="category" required>
-                <option value="Machinery vendor">Machinery vendor</option>
-                <option value="Tooling supplier">Tooling supplier</option>
-                <option value="Contract manufacturer">Contract manufacturer</option>
-                <option value="Skill / training">Skill / training</option>
-              </select>
-            </label>
-            <label>
-              Location / Region
-              <input name="location" type="text" />
-            </label>
-            <label class="full">
-              Notes
-              <textarea name="notes" rows="3"></textarea>
-            </label>
-            <label class="full">
-              <button class="btn primary" type="submit">Add to directory</button>
-            </label>
-          </form>
-          <div class="community-list">
-            <h3>Directory</h3>
-            <ul id="communityList"></ul>
+          
+           <div class="panel community" id="community">
+            <h2 class="section-title small">Registry</h2>
+             <form id="communityForm" class="compact-form">
+                <input name="name" type="text" placeholder="Name/Org" required />
+                <select name="category" required>
+                  <option value="Machinery vendor">Machinery</option>
+                  <option value="Tooling supplier">Tooling</option>
+                  <option value="Contract manufacturer">Contract Mfg</option>
+                </select>
+                <button class="btn small" type="submit">Add</button>
+             </form>
+            <ul id="communityList" class="community-list"></ul>
           </div>
-        </div>
+
+        </aside>
+
       </section>
     </main>
 
     <footer class="footer">
-      <div>
-        &copy; <span id="footerYear"></span> Build for India – open data for domestic manufacturing.
+      <div class="footer-content">
+        <span class="footer-brand">Build for India</span>
+        <span class="separator">•</span>
+        <span id="footerYear"></span>
       </div>
       <div class="footer-links">
-        <a href="https://github.com/VivekVardhanArrabelli/importdependencymap" target="_blank" rel="noopener">GitHub</a>
-        <a href="https://tradestat.commerce.gov.in" target="_blank" rel="noopener">Tradestat</a>
-        <a href="https://comtradeapi.un.org" target="_blank" rel="noopener">UN Comtrade</a>
+        <a href="https://github.com/VivekVardhanArrabelli/importdependencymap" target="_blank">GitHub</a>
+        <a href="https://tradestat.commerce.gov.in" target="_blank">Tradestat</a>
       </div>
     </footer>
 
-
-    <div id="toast" class="toast" role="status" aria-live="polite" aria-atomic="true" hidden></div>
-
+    <div id="toast" class="toast" role="status" aria-live="polite" hidden></div>
 
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-    <script src="/static/app.js?v=2"></script>
+    <script src="/static/app.js?v=3"></script>
   </body>
 </html>
