@@ -40,13 +40,11 @@ def _base_url() -> str:
     return base.rstrip("/")
 
 def _resolve_endpoint() -> str:
-    """Return the fully qualified /data endpoint for preview API."""
-    base = _base_url()
-    if "/preview" in base:
-        return f"{base}/data"
-    else:
-        # Fallback for legacy, but prefer preview
-        return f"{base}/v1/preview/data"
+    """Return the fully qualified /data endpoint for Comtrade requests (preview or full)."""
+    base = _base_url().rstrip("/")
+    if base.endswith("/data"):
+        return base
+    return f"{base}/data"
 
 def _request(params: Dict[str, str]) -> Dict:
     # Add subscription key if available
@@ -59,9 +57,8 @@ def _request(params: Dict[str, str]) -> Dict:
     for attempt in range(1, MAX_RETRIES + 1):
         try:
             req = request.Request(url)
-            # Alternative: Add as header if preferred by docs
-            # if key:
-            #     req.add_header("Ocp-Apim-Subscription-Key", key)
+            if key:
+                req.add_header("Ocp-Apim-Subscription-Key", key)
             
             with request.urlopen(req, timeout=45) as resp:
                 status = resp.status
@@ -137,17 +134,24 @@ def _parse_dataset(dataset: Iterable[Dict]) -> List[Record]:
     return records
 
 def _build_periods(from_period: str, to_period: str) -> List[str]:
-    """Generate comma-separated YYYYMM periods for preview API."""
-    from_parts = [int(from_period[:4]), int(from_period[4:])]
-    to_parts = [int(to_period[:4]), int(to_period[4:])]
-    periods = []
-    year, month = from_parts
-    while year < to_parts[0] or (year == to_parts[0] and month <= to_parts[1]):
-        periods.append(f"{year:04d}{month:02d}")
-        month += 1
-        if month > 12:
-            month = 1
-            year += 1
+    """Generate comma-separated YYYYMM periods from inclusive YYYY-MM or YYYYMM inputs."""
+    def parse_period(p: str) -> Tuple[int, int]:
+        p = (p or "").strip()
+        if "-" in p and len(p) >= 7:
+            return int(p[:4]), int(p[5:7])
+        return int(p[:4]), int(p[4:6])
+
+    from_y, from_m = parse_period(from_period)
+    to_y, to_m = parse_period(to_period)
+
+    periods: List[str] = []
+    y, m = from_y, from_m
+    while y < to_y or (y == to_y and m <= to_m):
+        periods.append(f"{y:04d}{m:02d}")
+        m += 1
+        if m > 12:
+            m = 1
+            y += 1
     return periods
 
 def fetch_range(
