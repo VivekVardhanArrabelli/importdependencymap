@@ -14,236 +14,239 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@400;500;700&family=Playfair+Display:ital,wght@0,400;0,600;0,700;1,400&family=Tenor+Sans&display=swap" rel="stylesheet">
     
-    <link rel="stylesheet" href="/static/styles.css?v=4" />
+    <link rel="stylesheet" href="/static/styles.css?v=5" />
   </head>
   <body>
 
-    <a class="skip-link" href="#dashboard">Skip to content</a>
+    <a class="skip-link" href="#main-content">Skip to content</a>
 
-    <header class="topbar">
-      <div class="brand">
-        <span class="brand__logo">🏛️</span>
-        <span>
-          Build for India
-          <small>Import Intelligence</small>
-        </span>
-      </div>
-
-      <nav aria-label="Primary">
-        <a href="#dashboard">Dashboard</a>
-        <a href="#detail">Analysis</a>
-        <a href="#business-case">Business Case</a>
-        <a href="#compare">Compare</a>
-        <a href="#watchlist">Watchlist</a>
-        <a href="#community">Community</a>
-      </nav>
-    </header>
-
-    <main>
-      <section class="hero" id="dashboard">
-        <div class="hero__content">
-          <h1 class="hero__title">Domestic<br/>Sovereignty</h1>
-          <p class="hero__subtitle">
-            Architecting India's manufacturing independence through data-driven import substitution.
-          </p>
-          <div class="hero__actions">
-            <button id="refreshBtn" class="btn primary">
-              <span>Refresh Intelligence</span>
-            </button>
-            <button id="downloadCsvBtn" class="btn outline">Download Report</button>
-          </div>
+    <div class="app-container">
+      <!-- Top Navigation -->
+      <header class="topbar">
+        <div class="brand">
+          <span class="brand__logo">🏛️</span>
+          <span>
+            Build for India
+            <small>Import Intelligence</small>
+          </span>
         </div>
+
+        <nav aria-label="Primary">
+          <button class="nav-link active" data-view="dashboard">Dashboard</button>
+          <button class="nav-link" data-view="community">Community</button>
+        </nav>
+      </header>
+
+      <main id="main-content">
         
-        <div class="stats-grid" id="headlineStats">
-          <div class="stat-card">
-            <h3>Tracking</h3>
-            <p id="statTotalProducts">—</p>
-            <span class="stat-label">HS Codes</span>
-          </div>
-          <div class="stat-card">
-            <h3>Volume</h3>
-            <p id="statImportUsd">—</p>
-            <span class="stat-label">12m Import Value</span>
-          </div>
-          <div class="stat-card">
-            <h3>Opportunity</h3>
-            <p id="statAvgScore">—</p>
-            <span class="stat-label">Avg. Score</span>
-          </div>
-          <div class="stat-card alert">
-            <h3>Critical</h3>
-            <p id="statAlerts">—</p>
-            <span class="stat-label">High Alerts</span>
-          </div>
-        </div>
-      </section>
-
-      <section class="layout-columns">
-        
-        <aside class="sidebar">
-          <div class="panel filters sticky">
-            <h2 class="section-title">Refine</h2>
-            
-            <div class="status-indicator" id="status" role="status" aria-live="polite">Ready</div>
-
-            <div class="input-group">
-              <label for="search">Search</label>
-              <input id="search" type="text" placeholder="Search commodities..." />
+        <!-- View: Dashboard -->
+        <div id="view-dashboard" class="view-section active">
+          
+          <div class="dashboard-header">
+            <h1 class="hero__title">Domestic Sovereignty</h1>
+            <div class="hero__actions">
+              <button id="refreshBtn" class="btn small outline">Refresh</button>
+              <button id="downloadCsvBtn" class="btn small outline">Export CSV</button>
             </div>
-
-            <div class="input-group">
-              <label for="sectors">Sectors</label>
-              <input id="sectors" type="text" placeholder="electronics, industrial..." />
-            </div>
-
-            <div class="input-group-row">
-              <div>
-                <label>Min Capex</label>
-                <input id="minCapex" type="number" min="0" step="10000" placeholder="0" />
-              </div>
-              <div>
-                <label>Max Capex</label>
-                <input id="maxCapex" type="number" min="0" step="10000" placeholder="∞" />
-              </div>
-            </div>
-
-            <div class="input-group">
-              <label for="sort">Ordering</label>
-              <select id="sort">
-                <option value="opportunity">Opportunity Score</option>
-                <option value="progress">Import Reduction</option>
-                <option value="value">Import Value</option>
-              </select>
-            </div>
-
-            <button id="loadBtn" class="btn full">Apply Filters</button>
-          </div>
-        </aside>
-
-        <div class="main-content">
-          <div class="panel results">
-            <div class="panel-header">
-              <h2 class="section-title">Commodities</h2>
-              <span class="meta-serif" id="resultsMeta">—</span>
-            </div>
-            <div class="cards-grid" id="cards"></div>
           </div>
 
-          <div class="panel detail hidden" id="detail">
-            <div class="panel-header">
-              <h2 id="detailTitle" class="section-title" tabindex="-1">Select a Product</h2>
-              <button id="watchBtn" class="btn text-only" disabled>Add to Watchlist</button>
+          <!-- Stats Row -->
+          <div class="stats-grid" id="headlineStats">
+            <div class="stat-card">
+              <h3>Tracking</h3>
+              <p id="statTotalProducts">—</p>
+              <span class="stat-label">HS Codes</span>
             </div>
-            
-            <div class="detail-layout">
-              <div class="chart-container frame">
-                <canvas id="trendChart"></canvas>
+            <div class="stat-card">
+              <h3>Volume</h3>
+              <p id="statImportUsd">—</p>
+              <span class="stat-label">12m Import Value</span>
+            </div>
+            <div class="stat-card">
+              <h3>Opportunity</h3>
+              <p id="statAvgScore">—</p>
+              <span class="stat-label">Avg. Score</span>
+            </div>
+            <div class="stat-card alert">
+              <h3>Critical</h3>
+              <p id="statAlerts">—</p>
+              <span class="stat-label">High Alerts</span>
+            </div>
+          </div>
+
+          <div class="content-layout">
+            <!-- Left Filters Sidebar -->
+            <aside class="sidebar-filters">
+              <div class="panel sticky">
+                <h2 class="section-title">Refine</h2>
+                <div class="input-group">
+                  <label for="search">Search</label>
+                  <input id="search" type="text" placeholder="Search commodities..." />
+                </div>
+                <div class="input-group">
+                  <label for="sectors">Sectors</label>
+                  <input id="sectors" type="text" placeholder="electronics, industrial..." />
+                </div>
+                <div class="input-group-row">
+                  <div>
+                    <label>Min Capex</label>
+                    <input id="minCapex" type="number" min="0" step="10000" placeholder="0" />
+                  </div>
+                  <div>
+                    <label>Max Capex</label>
+                    <input id="maxCapex" type="number" min="0" step="10000" placeholder="∞" />
+                  </div>
+                </div>
+                <div class="input-group">
+                  <label for="sort">Ordering</label>
+                  <select id="sort">
+                    <option value="opportunity">Opportunity Score</option>
+                    <option value="progress">Import Reduction</option>
+                    <option value="value">Import Value</option>
+                  </select>
+                </div>
+                <button id="loadBtn" class="btn full">Apply Filters</button>
               </div>
               
-              <div class="insights-column">
-                <div class="insight-block">
-                  <h3>Metrics</h3>
-                  <ul id="detailSnapshot" class="serif-list"></ul>
+              <div class="panel">
+                 <h2 class="section-title small">Compare</h2>
+                 <form id="compareForm" class="compact-form">
+                    <select id="compareA"><option value="">Item A</option></select>
+                    <div style="text-align:center; font-style:italic; color:var(--text-gold)">vs</div>
+                    <select id="compareB"><option value="">Item B</option></select>
+                    <button class="btn small outline" type="submit">Analyze</button>
+                 </form>
+                 <div id="compareResults" class="compare-results-compact"></div>
+              </div>
+            </aside>
+
+            <!-- Main Results Area -->
+            <div class="main-results">
+              <div class="results-header">
+                <h2 class="section-title">Commodities</h2>
+                <div class="results-controls">
+                   <span class="meta-serif" id="resultsMeta">—</span>
+                   <div class="view-toggles">
+                     <button class="icon-btn active" id="viewGrid" title="Grid View">☷</button>
+                     <button class="icon-btn" id="viewTable" title="Table View">☰</button>
+                   </div>
                 </div>
-                <div class="insight-block">
-                  <h3>Origin</h3>
-                  <div class="chart-donut">
-                    <canvas id="partnerChart"></canvas>
-                  </div>
-                  <ul id="partnerList" class="partner-list"></ul>
-                </div>
+              </div>
+              
+              <div id="cards" class="cards-grid"></div>
+              <div id="tableContainer" class="table-container hidden">
+                <table class="data-table" id="resultsTable">
+                  <thead>
+                    <tr>
+                      <th>HS Code</th>
+                      <th>Title</th>
+                      <th>Sectors</th>
+                      <th class="text-right">Imports (12m)</th>
+                      <th class="text-right">Score</th>
+                      <th></th>
+                    </tr>
+                  </thead>
+                  <tbody></tbody>
+                </table>
               </div>
             </div>
+            
+            <!-- Right Sidebar: Watchlist & Alerts -->
+            <aside class="sidebar-extras">
+               <div class="panel">
+                  <h2 class="section-title small">Watchlist</h2>
+                  <ul id="watchlistList" class="compact-list"></ul>
+               </div>
+               <div class="panel">
+                  <h2 class="section-title small">Signals</h2>
+                  <ul id="alertsList" class="compact-list"></ul>
+               </div>
+            </aside>
           </div>
-
-          <!-- Business Case Section -->
-          <div class="panel" id="business-case">
-            <h2 class="section-title">Feasibility Study</h2>
-            <form id="businessCaseForm" class="neoclassical-form" autocomplete="off">
-              <div class="form-row">
-                <label>Selected HS Code <input id="caseHs" type="text" readonly /></label>
-                <label>Target Output / Mo <input id="caseUnits" type="number" placeholder="1000" /></label>
-                <label>Avg. Price (USD) <input id="casePrice" type="number" placeholder="150" /></label>
-              </div>
-              <div class="form-row">
-                <label>Replacement % <input id="caseReplacement" type="number" placeholder="40" /></label>
-                <label>Est. Capex <input id="caseCapex" type="number" placeholder="Auto" /></label>
-                <label>Est. Opex / Mo <input id="caseOpex" type="number" placeholder="50000" /></label>
-              </div>
-              <button class="btn primary" type="submit">Generate Projection</button>
-            </form>
-            <div id="businessCaseResults" class="metrics-grid"></div>
-          </div>
-          
-          <!-- Compare Section -->
-          <div class="panel" id="compare">
-            <h2 class="section-title">Comparative Analysis</h2>
-            <form id="compareForm" class="compare-form">
-              <select id="compareA"></select>
-              <span class="vs">vs</span>
-              <select id="compareB"></select>
-              <button class="btn outline" type="submit">Analyze</button>
-            </form>
-            <div id="compareResults" class="compare-grid"></div>
-          </div>
-
         </div>
-        
-        <!-- Right Column: Alerts & Watchlist -->
-        <aside class="sidebar-right">
-          <div class="panel alerts" id="alertsPanel">
-            <h2 class="section-title small">Critical Signals</h2>
-            <ul id="alertsList" class="alerts-list"></ul>
-          </div>
 
-          <div class="panel watchlist" id="watchlist">
-            <h2 class="section-title small">Watchlist</h2>
-            <table class="compact-table" id="watchlistTable">
-              <thead>
-                <tr>
-                  <th>Code</th>
-                  <th>Metric</th>
-                  <th></th>
-                </tr>
-              </thead>
-              <tbody></tbody>
-            </table>
-          </div>
-          
-           <div class="panel community" id="community">
-            <h2 class="section-title small">Registry</h2>
-             <form id="communityForm" class="compact-form">
-                <input name="name" type="text" placeholder="Name/Org" required />
-                <select name="category" required>
-                  <option value="Machinery vendor">Machinery</option>
-                  <option value="Tooling supplier">Tooling</option>
-                  <option value="Contract manufacturer">Contract Mfg</option>
-                </select>
-                <button class="btn small" type="submit">Add</button>
+        <!-- View: Community -->
+        <div id="view-community" class="view-section hidden">
+           <div class="panel-header">
+             <h2 class="section-title">Registry</h2>
+             <p class="hero__subtitle">Connect with suppliers, vendors, and partners.</p>
+           </div>
+           <div class="community-layout">
+             <div class="panel">
+                <form id="communityForm" class="neoclassical-form">
+                  <div class="form-row">
+                    <label>Name / Org <input name="name" type="text" required /></label>
+                    <label>Category 
+                       <select name="category" required>
+                        <option value="Machinery vendor">Machinery</option>
+                        <option value="Tooling supplier">Tooling</option>
+                        <option value="Contract manufacturer">Contract Mfg</option>
+                      </select>
+                    </label>
+                  </div>
+                  <label>Location <input name="location" type="text" /></label>
+                  <label>Notes <textarea name="notes" rows="2"></textarea></label>
+                  <button class="btn primary" type="submit">Add Entry</button>
+                </form>
+             </div>
+             <ul id="communityList" class="community-grid"></ul>
+           </div>
+        </div>
+
+      </main>
+
+      <!-- Detail Drawer (Overlay) -->
+      <div class="drawer-backdrop hidden" id="drawerBackdrop"></div>
+      <div class="drawer hidden" id="detailDrawer">
+        <div class="drawer-header">
+          <h2 id="drawerTitle">Product Detail</h2>
+          <button class="close-btn" id="closeDrawer">×</button>
+        </div>
+        <div class="drawer-content">
+           <div class="drawer-actions">
+             <button id="drawerWatchBtn" class="btn outline small">Watch</button>
+           </div>
+           
+           <div class="insight-block">
+              <h3>Key Metrics</h3>
+              <ul id="detailSnapshot" class="serif-list"></ul>
+           </div>
+
+           <div class="chart-container frame">
+             <canvas id="trendChart"></canvas>
+           </div>
+
+           <div class="insight-block">
+             <h3>Origin</h3>
+             <div class="chart-donut-small">
+               <canvas id="partnerChart"></canvas>
+             </div>
+             <ul id="partnerList" class="partner-list"></ul>
+           </div>
+
+           <div class="drawer-section">
+             <h2 class="section-title small">Feasibility Study</h2>
+             <form id="businessCaseForm" class="compact-form">
+                <div class="form-row small-gap">
+                  <label>Target Output/Mo <input id="caseUnits" type="number" placeholder="1000" /></label>
+                  <label>Avg Price <input id="casePrice" type="number" placeholder="150" /></label>
+                </div>
+                <div class="form-row small-gap">
+                  <label>Replace % <input id="caseReplacement" type="number" placeholder="40" /></label>
+                  <label>Capex <input id="caseCapex" type="number" placeholder="Auto" /></label>
+                  <label>Opex/Mo <input id="caseOpex" type="number" placeholder="50000" /></label>
+                </div>
+                <button class="btn primary small" type="submit">Calculate</button>
              </form>
-            <ul id="communityList" class="community-list"></ul>
-          </div>
-
-        </aside>
-
-      </section>
-    </main>
-
-    <footer class="footer">
-      <div class="footer-content">
-        <span class="footer-brand">Build for India</span>
-        <span class="separator">•</span>
-        <span id="footerYear"></span>
+             <div id="businessCaseResults" class="metrics-grid compact"></div>
+           </div>
+        </div>
       </div>
-      <div class="footer-links">
-        <a href="https://github.com/VivekVardhanArrabelli/importdependencymap" target="_blank">GitHub</a>
-        <a href="https://tradestat.commerce.gov.in" target="_blank">Tradestat</a>
-      </div>
-    </footer>
+    </div>
 
     <div id="toast" class="toast" role="status" aria-live="polite" hidden></div>
 
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-    <script src="/static/app.js?v=3"></script>
+    <script src="/static/app.js?v=4"></script>
   </body>
 </html>
