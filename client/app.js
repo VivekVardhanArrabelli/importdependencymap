@@ -20,7 +20,7 @@ const CHART_COLORS = {
 };
 
 document.addEventListener('DOMContentLoaded', () => {
-  document.getElementById('footerYear').textContent = new Date().getFullYear();
+  const fy = document.getElementById('footerYear'); if (fy) fy.textContent = new Date().getFullYear();
   wireEvents();
   loadProducts();
   renderWatchlistSidebar();
@@ -188,7 +188,7 @@ async function openDrawer(hsCode) {
     `;
     
     // Pre-fill Business Case
-    document.getElementById('caseHs').value = product.hs_code;
+    const caseHsEl = document.getElementById('caseHs'); if (caseHsEl) caseHsEl.value = product.hs_code;
     const capex = product.capex_max || product.capex_min || 0;
     if (capex) document.getElementById('caseCapex').placeholder = usdFormatter.format(capex);
     document.getElementById('businessCaseResults').innerHTML = ''; // Clear previous results
