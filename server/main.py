@@ -149,37 +149,42 @@ def seed_database(request: Request) -> Dict[str, Any]:
     _require_database_url()
 
     now_iso = datetime.now(timezone.utc).isoformat()
-    with db.connect() as conn:
-        db.init_db(conn)
-        product_count = 0
-        monthly_count = 0
-        for row in rows:
-            db.upsert_product(
-                conn,
-                hs_code=row["hs_code"],
-                title=row["title"],
-                description=row["description"],
-                sectors=row["sectors"],
-                capex_min=row["capex_min"],
-                capex_max=row["capex_max"],
-            )
-            product_count += 1
-            for month in range(1, 13):
-                db.insert_monthly(
+    try:
+        with db.connect() as conn:
+            db.init_db(conn)
+            product_count = 0
+            monthly_count = 0
+            for row in rows:
+                db.upsert_product(
                     conn,
                     hs_code=row["hs_code"],
-                    year=datetime.now(timezone.utc).year,
-                    month=month,
-                    value_usd=normalize.ensure_usd(row["seed_month_value"]),
-                    value_inr=None,
-                    fx_rate=None,
-                    qty=None,
-                    partner=row["top_country"],
+                    title=row["title"],
+                    description=row["description"],
+                    sectors=row["sectors"],
+                    capex_min=row["capex_min"],
+                    capex_max=row["capex_max"],
                 )
-                monthly_count += 1
+                product_count += 1
+                for month in range(1, 13):
+                    db.insert_monthly(
+                        conn,
+                        hs_code=row["hs_code"],
+                        year=datetime.now(timezone.utc).year,
+                        month=month,
+                        value_usd=normalize.ensure_usd(row["seed_month_value"]),
+                        value_inr=None,
+                        fx_rate=None,
+                        qty=None,
+                        partner=row["top_country"],
+                    )
+                    monthly_count += 1
 
-        baseline_summary = jobs.recompute_baseline(conn)
-        progress_summary = jobs.recompute_progress(conn)
+            baseline_summary = jobs.recompute_baseline(conn)
+            progress_summary = jobs.recompute_progress(conn)
+
+    except Exception as exc:
+        LOGGER.exception("Error during seed_database execution")
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Seeding failed: {str(exc)}")
 
     return {
         "seeded": True,

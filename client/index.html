@@ -6,6 +6,7 @@
     <meta http-equiv="Cache-Control" content="no-store, no-cache, must-revalidate" />
     <meta http-equiv="Pragma" content="no-cache" />
     <meta http-equiv="Expires" content="0" />
+    <meta name="description" content="Track India's import dependencies, identify manufacturing opportunities, and build domestic capability." />
     <title>Build for India Imports Intelligence</title>
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
@@ -13,7 +14,7 @@
       href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap"
       rel="stylesheet"
     />
-    <link rel="stylesheet" href="/static/styles.css?v=2" />
+    <link rel="stylesheet" href="/static/styles.css?v=3" />
   </head>
   <body>
 
@@ -29,7 +30,6 @@
       </div>
 
       <nav aria-label="Primary">
-
         <a href="#dashboard">Dashboard</a>
         <a href="#detail">Product Detail</a>
         <a href="#business-case">Business Case</a>
@@ -133,7 +133,7 @@
         </div>
         <div class="detail__grid">
           <div class="detail__chart">
-            <canvas id="trendChart" height="260"></canvas>
+            <canvas id="trendChart" height="300"></canvas>
           </div>
           <div class="detail__insights">
             <div class="insight">
@@ -176,7 +176,9 @@
             Estimated Opex per month (USD)
             <input id="caseOpex" type="number" min="0" step="1000" placeholder="50000" autocomplete="off" />
           </label>
-          <button class="btn primary" type="submit">Calculate</button>
+          <label class="full">
+            <button class="btn primary" type="submit">Calculate</button>
+          </label>
         </form>
         <div class="business-case__results" id="businessCaseResults"></div>
       </section>
@@ -241,7 +243,9 @@
               Notes
               <textarea name="notes" rows="3"></textarea>
             </label>
-            <button class="btn primary" type="submit">Add to directory</button>
+            <label class="full">
+              <button class="btn primary" type="submit">Add to directory</button>
+            </label>
           </form>
           <div class="community-list">
             <h3>Directory</h3>
