@@ -67,11 +67,17 @@ def _request(params: Dict[str, str]) -> Dict:
                 payload = resp.read()
                 return json.loads(payload.decode("utf-8"))
         except error.HTTPError as exc:
+            body = ""
+            try:
+                body = exc.read().decode("utf-8")
+            except Exception:
+                body = ""
             if exc.code in RETRY_STATUS and attempt < MAX_RETRIES:
                 LOGGER.warning("Comtrade HTTP %s (%s/%s); backing off", exc.code, attempt, MAX_RETRIES)
                 time.sleep(min(2 ** attempt, 30))
                 continue
-            raise
+            detail = body or exc.reason or "Unknown HTTP error"
+            raise RuntimeError(f"Comtrade request failed ({exc.code}): {detail}") from exc
         except error.URLError as exc:
             LOGGER.warning("Comtrade request failed (%s/%s): %s", attempt, MAX_RETRIES, exc)
             if attempt == MAX_RETRIES:
