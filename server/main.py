@@ -666,13 +666,13 @@ def comtrade_probe(
     freq: str = Query(default="M", description="M=monthly, A=annual"),
     cmd: str = Query(default="TOTAL", description="HS code or TOTAL"),
     reporter: Optional[str] = Query(default=None, description="Override reporterCode (e.g., 356)"),
-    flow: Optional[str] = Query(default=None, description="Override flowCode (e.g., 2 for imports)"),
+    flow: Optional[str] = Query(default=None, description="Override rgCode/trade flow (1=Import,2=Export)"),
     partner: Optional[str] = Query(default=None, description="Optional partnerCode (0 for World)"),
 ) -> Dict[str, Any]:
     _verify_admin(request)
     # Build params following Comtrade v1 /data
     reporter_code = (reporter or os.getenv("COMTRADE_REPORTER", "356")).strip()
-    flow_code = (flow or os.getenv("COMTRADE_FLOW", "2")).strip()
+    flow_code = (flow or os.getenv("COMTRADE_FLOW", "1")).strip()
     freq_code = (freq or os.getenv("COMTRADE_FREQ", "M")).strip()
 
     # Normalize period to YYYYMM or YYYY
@@ -685,7 +685,7 @@ def comtrade_probe(
         "freqCode": freq_code,
         "clCode": "HS",
         "reporterCode": reporter_code,
-        "flowCode": flow_code,
+        "rgCode": flow_code,
         "period": p,
         "cmdCode": cmd,
     }
