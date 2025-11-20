@@ -701,24 +701,32 @@ def comtrade_probe(
 
     try:
         payload = comtrade._request(dict(params))  # type: ignore[attr-defined]
-        data = payload.get("data") if isinstance(payload, dict) else None
-        count = payload.get("count") if isinstance(payload, dict) else None
-        if count is None and isinstance(data, list):
-            count = len(data)
-        response = {
+    except Exception as exc:
+        return {
             "endpoint": endpoint,
             "debug_url": debug_url,
             "params": params,
             "has_key": bool(os.getenv("COMTRADE_KEY")),
-            "statusCode": payload.get("statusCode") if isinstance(payload, dict) else None,
-            "count": count,
-            "validation": payload.get("validation") if isinstance(payload, dict) else None,
-            "error": payload.get("error") if isinstance(payload, dict) else None,
-            "data_head": (data[:3] if isinstance(data, list) else None),
+            "error": str(exc),
             "source": ADMIN_SOURCE,
             "last_updated": datetime.now(timezone.utc).isoformat(),
         }
-        return response
-    except Exception as exc:
-        LOGGER.exception("Comtrade probe failed")
-        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=f"Probe failed: {str(exc)}")
+
+    data = payload.get("data") if isinstance(payload, dict) else None
+    count = payload.get("count") if isinstance(payload, dict) else None
+    if count is None and isinstance(data, list):
+        count = len(data)
+    response = {
+        "endpoint": endpoint,
+        "debug_url": debug_url,
+        "params": params,
+        "has_key": bool(os.getenv("COMTRADE_KEY")),
+        "statusCode": payload.get("statusCode") if isinstance(payload, dict) else None,
+        "count": count,
+        "validation": payload.get("validation") if isinstance(payload, dict) else None,
+        "error": payload.get("error") if isinstance(payload, dict) else None,
+        "data_head": (data[:3] if isinstance(data, list) else None),
+        "source": ADMIN_SOURCE,
+        "last_updated": datetime.now(timezone.utc).isoformat(),
+    }
+    return response
