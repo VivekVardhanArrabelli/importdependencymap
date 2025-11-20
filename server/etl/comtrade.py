@@ -169,13 +169,13 @@ def fetch_range(
     frequency: Optional[str] = None,
 ) -> List[Record]:
     reporter_code = reporter_code or os.getenv("COMTRADE_REPORTER", "356")  # India
-    flow_code = flow_code or os.getenv("COMTRADE_FLOW", "2")  # Imports
+    flow_code = flow_code or os.getenv("COMTRADE_FLOW", "1")  # Trade flow (1=Import, 2=Export)
     frequency = frequency or os.getenv("COMTRADE_FREQ", "M")
     
     # Base params for preview API
     base_params = {
         "reporterCode": reporter_code,
-        "flowCode": flow_code,
+        "rgCode": flow_code,
         "freqCode": frequency,
         "typeCode": "C",  # Customs value
         "period": ",".join(_build_periods(from_period, to_period)),
