@@ -18,6 +18,40 @@ LOGGER = logging.getLogger(__name__)
 MAX_RETRIES = 4
 RETRY_STATUS = {429, 500, 502, 503, 504}
 
+DEFAULT_BASE = "https://comtradeapi.un.org/data/v1"
+DEFAULT_OPERATION = "get"
+DEFAULT_TYPE_CODE = "C"
+DEFAULT_FREQ_CODE = "M"
+DEFAULT_CLASSIFICATION = "HS"
+DEFAULT_REPORTER_CODE = "356"  # India
+DEFAULT_FLOW_CODE = "M"  # Import
+DEFAULT_PARTNER_CODE = "0"  # World aggregate
+
+REPORTER_NAME_MAP = {
+    "india": "356",
+}
+
+FLOW_CODE_MAP = {
+    "m": "M",
+    "import": "M",
+    "imports": "M",
+    "1": "M",
+    "x": "X",
+    "export": "X",
+    "exports": "X",
+    "2": "X",
+    "r": "R",
+    "re-export": "R",
+    "reexport": "R",
+    "3": "R",
+    "i": "I",
+    "re-import": "I",
+    "reimport": "I",
+    "4": "I",
+}
+
+HS_CHAPTERS: Tuple[int, ...] = tuple(range(1, 100))
+
 @dataclass
 class Record:
     hs_code: str
@@ -34,26 +68,29 @@ class Record:
     partner_country: Optional[str] = None
 
 def _base_url() -> str:
-    base = os.getenv("COMTRADE_BASE")
-    if not base:
-        raise RuntimeError("COMTRADE_BASE environment variable is required")
+    base = os.getenv("COMTRADE_BASE", DEFAULT_BASE)
     return base.rstrip("/")
 
-def _resolve_endpoint() -> str:
-    """Return the fully qualified /data endpoint for Comtrade requests (preview or full)."""
-    base = _base_url().rstrip("/")
-    if base.endswith("/data"):
-        return base
-    return f"{base}/data"
 
-def _request(params: Dict[str, str]) -> Dict:
+def _resolve_endpoint(*path_parts: str) -> str:
+    """Return the fully qualified endpoint for Comtrade requests."""
+    parts = [_base_url().rstrip("/")]
+    parts.extend(part.strip("/") for part in path_parts if part)
+    return "/".join(parts)
+
+def _request(
+    params: Dict[str, str],
+    *,
+    path_parts: Optional[Iterable[str]] = None,
+) -> Dict:
     # Add subscription key if available
     key = os.getenv("COMTRADE_KEY")
     if key:
         params["subscription-key"] = key
     
     query = parse.urlencode(params)
-    url = f"{_resolve_endpoint()}?{query}"
+    path = list(path_parts or [])
+    url = f"{_resolve_endpoint(*path)}?{query}"
     for attempt in range(1, MAX_RETRIES + 1):
         try:
             req = request.Request(url)
@@ -86,9 +123,12 @@ def _request(params: Dict[str, str]) -> Dict:
     raise RuntimeError("Comtrade API request failed after retries")
 
 def _extract_dataset(payload: Dict) -> List[Dict]:
-    data = payload.get("data", [])
+    data = payload.get("data")
     if isinstance(data, list):
         return data
+    dataset = payload.get("dataset")
+    if isinstance(dataset, list):
+        return dataset
     return []
 
 def _next_cursor(payload: Dict) -> Optional[str]:
@@ -160,6 +200,93 @@ def _build_periods(from_period: str, to_period: str) -> List[str]:
             y += 1
     return periods
 
+
+def _normalize_reporter_code(value: Optional[str]) -> str:
+    candidate = value.strip() if value else None
+    if candidate:
+        if candidate.isdigit():
+            return candidate
+        mapped = REPORTER_NAME_MAP.get(candidate.lower())
+        if mapped:
+            return mapped
+    env_code = os.getenv("COMTRADE_REPORTER_CODE")
+    if env_code:
+        env_code = env_code.strip()
+        if env_code:
+            return env_code
+    env_name = os.getenv("COMTRADE_REPORTER")
+    if env_name:
+        env_name = env_name.strip()
+        if env_name.isdigit():
+            return env_name
+        mapped = REPORTER_NAME_MAP.get(env_name.lower())
+        if mapped:
+            return mapped
+    return DEFAULT_REPORTER_CODE
+
+
+def _normalize_flow_code(value: Optional[str]) -> str:
+    def resolve(token: Optional[str]) -> Optional[str]:
+        if not token:
+            return None
+        normalized = token.strip()
+        if not normalized:
+            return None
+        key = normalized.lower()
+        if normalized.upper() in {"M", "X", "R", "I"}:
+            return normalized.upper()
+        if key in FLOW_CODE_MAP:
+            return FLOW_CODE_MAP[key]
+        return None
+
+    for candidate in (
+        value,
+        os.getenv("COMTRADE_FLOW_CODE"),
+        os.getenv("COMTRADE_FLOW"),
+    ):
+        resolved = resolve(candidate)
+        if resolved:
+            return resolved
+
+    return DEFAULT_FLOW_CODE
+
+
+def _normalize_partner_code(value: Optional[str]) -> Optional[str]:
+    candidate = value.strip() if value else None
+    if not candidate:
+        candidate = os.getenv("COMTRADE_PARTNER_CODE") or os.getenv("COMTRADE_PARTNER")
+        candidate = candidate.strip() if candidate else DEFAULT_PARTNER_CODE
+    lowered = candidate.lower()
+    if lowered in {"", "all"}:
+        return None
+    if lowered == "world":
+        return "0"
+    return candidate
+
+
+def _resolve_type_code(value: Optional[str]) -> str:
+    candidate = value or os.getenv("COMTRADE_TYPE_CODE") or os.getenv("COMTRADE_TYPE")
+    candidate = (candidate or DEFAULT_TYPE_CODE).strip()
+    return candidate.upper() or DEFAULT_TYPE_CODE
+
+
+def _resolve_freq_code(value: Optional[str]) -> str:
+    candidate = value or os.getenv("COMTRADE_FREQ_CODE") or os.getenv("COMTRADE_FREQ")
+    candidate = (candidate or DEFAULT_FREQ_CODE).strip()
+    return candidate.upper() or DEFAULT_FREQ_CODE
+
+
+def _resolve_classification(value: Optional[str] = None) -> str:
+    candidate = value or os.getenv("COMTRADE_CL_CODE") or os.getenv("COMTRADE_CLASSIFICATION")
+    candidate = (candidate or DEFAULT_CLASSIFICATION).strip()
+    return candidate.upper() or DEFAULT_CLASSIFICATION
+
+
+def _build_path_segments(type_code: str, freq_code: str, classification: str) -> List[str]:
+    operation = os.getenv("COMTRADE_PATH", DEFAULT_OPERATION).strip().strip("/")
+    operation = operation or DEFAULT_OPERATION
+    return [operation, type_code.upper(), freq_code.upper(), classification.upper()]
+
 def fetch_range(
     from_period: str,
     to_period: str,
@@ -168,35 +295,47 @@ def fetch_range(
     flow_code: Optional[str] = None,
     frequency: Optional[str] = None,
 ) -> List[Record]:
-    reporter_code = reporter_code or os.getenv("COMTRADE_REPORTER", "356")  # India
-    flow_code = flow_code or os.getenv("COMTRADE_FLOW", "1")  # Trade flow (1=Import, 2=Export)
-    frequency = frequency or os.getenv("COMTRADE_FREQ", "M")
-    
-    # Base params for preview API
+    reporter_code = _normalize_reporter_code(reporter_code)
+    flow_code = _normalize_flow_code(flow_code)
+    freq_code = _resolve_freq_code(frequency)
+    type_code = _resolve_type_code(None)
+    classification = _resolve_classification()
+    partner_code = _normalize_partner_code(None)
+    include_desc = "true" if os.getenv("COMTRADE_INCLUDE_DESC", "false").lower() in {"1", "true", "yes"} else "false"
+    path_segments = _build_path_segments(type_code, freq_code, classification)
+
     base_params = {
         "reporterCode": reporter_code,
-        "rgCode": flow_code,
-        "freqCode": frequency,
-        "typeCode": "C",  # Customs value
+        "flowCode": flow_code,
         "period": ",".join(_build_periods(from_period, to_period)),
+        "includeDesc": include_desc,
     }
+    if partner_code:
+        base_params["partnerCode"] = partner_code
     
     all_records = []
-    for chapter in range(1, 100):  # HS chapters 01-99
+    for chapter in HS_CHAPTERS:  # HS chapters 01-99
         params = dict(base_params)
-        params["cmdCode"] = f"{chapter:02d}*"  # Chapter wildcard (preview supports limited)
+        params["cmdCode"] = f"{chapter:02d}*"  # Chapter wildcard
         
         dataset = []
         cursor = None
         while True:
+            query_params = dict(params)
             if cursor:
-                params["cursor"] = cursor
-            payload = _request(params)
-            
-            if payload.get("statusCode") == 404:
-                LOGGER.debug("No data for HS chapter %02d", chapter)
+                query_params["cursor"] = cursor
+            payload = _request(query_params, path_parts=path_segments)
+
+            validation = payload.get("validation") if isinstance(payload, dict) else None
+            if isinstance(validation, dict) and str(validation.get("status", "")).upper() == "ERROR":
+                message = validation.get("message") or validation.get("description") or "Comtrade validation error"
+                raise RuntimeError(message)
+
+            error_message = payload.get("error") if isinstance(payload, dict) else None
+            if error_message:
+                LOGGER.warning("Comtrade error for HS chapter %02d: %s", chapter, error_message)
                 break
-            
+
             dataset.extend(_extract_dataset(payload))
             cursor = _next_cursor(payload)
             if not cursor:

@@ -9,10 +9,13 @@ from server.etl import comtrade
 class ComtradeETLTest(unittest.TestCase):
     def setUp(self):
         os.environ["FX_RATES_FILE"] = str(Path("data/fx_rates.csv").resolve())
+        self._orig_chapters = comtrade.HS_CHAPTERS
+        comtrade.HS_CHAPTERS = (1,)
 
     def tearDown(self):
         if "FX_RATES_FILE" in os.environ:
             del os.environ["FX_RATES_FILE"]
+        comtrade.HS_CHAPTERS = self._orig_chapters
 
     @patch("server.etl.comtrade._request")
     def test_fetch_range_uses_defaults(self, mock_request):
@@ -24,13 +27,15 @@ class ComtradeETLTest(unittest.TestCase):
         comtrade.fetch_range("2024-01", "2024-02")
 
 
-        called_params = mock_request.call_args[0][0]
-        self.assertEqual(called_params["reporter"], "India")
-        self.assertEqual(called_params["flow"], "import")
+        called_params = mock_request.call_args.args[0]
+        path_parts = mock_request.call_args.kwargs["path_parts"]
 
-        self.assertEqual(called_params["time_period"], "2024-01:2024-02")
-        self.assertEqual(called_params["reporterCode"], "699")
+        self.assertEqual(called_params["reporterCode"], "356")
+        self.assertEqual(called_params["flowCode"], "M")
+        self.assertEqual(called_params["period"], "202401,202402")
         self.assertEqual(called_params["partnerCode"], "0")
+        self.assertEqual(called_params["includeDesc"], "false")
+        self.assertEqual(path_parts, ["get", "C", "M", "HS"])
 
 
         os.environ.pop("COMTRADE_REPORTER", None)
@@ -62,8 +67,8 @@ class ComtradeETLTest(unittest.TestCase):
 
         self.assertEqual(len(records), 2)
         self.assertEqual(mock_request.call_count, 2)
-        first_call_params = mock_request.call_args_list[0][0][0]
-        second_call_params = mock_request.call_args_list[1][0][0]
+        first_call_params = mock_request.call_args_list[0].args[0]
+        second_call_params = mock_request.call_args_list[1].args[0]
         self.assertNotIn("cursor", first_call_params)
         self.assertEqual(second_call_params.get("cursor"), "abc")
 

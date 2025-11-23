@@ -671,9 +671,12 @@ def comtrade_probe(
 ) -> Dict[str, Any]:
     _verify_admin(request)
     # Build params following Comtrade v1 /data
-    reporter_code = (reporter or os.getenv("COMTRADE_REPORTER", "356")).strip()
-    flow_code = (flow or os.getenv("COMTRADE_FLOW", "1")).strip()
-    freq_code = (freq or os.getenv("COMTRADE_FREQ", "M")).strip()
+    reporter_code = comtrade._normalize_reporter_code(reporter)  # type: ignore[attr-defined]
+    flow_code = comtrade._normalize_flow_code(flow)  # type: ignore[attr-defined]
+    freq_code = comtrade._resolve_freq_code(freq)  # type: ignore[attr-defined]
+    type_code = comtrade._resolve_type_code(None)  # type: ignore[attr-defined]
+    classification = comtrade._resolve_classification()  # type: ignore[attr-defined]
+    path_segments = comtrade._build_path_segments(type_code, freq_code, classification)  # type: ignore[attr-defined]
 
     # Normalize period to YYYYMM or YYYY
     p = period.strip()
@@ -681,26 +684,24 @@ def comtrade_probe(
         p = f"{p[:4]}{p[5:7]}"
 
     params = {
-        "typeCode": "C",
-        "freqCode": freq_code,
-        "clCode": "HS",
         "reporterCode": reporter_code,
-        "rgCode": flow_code,
+        "flowCode": flow_code,
         "period": p,
         "cmdCode": cmd,
+        "includeDesc": "false",
     }
     if partner:
         params["partnerCode"] = partner
 
     # Mask key in debug URL, but include it in real request via comtrade._request
-    endpoint = comtrade._resolve_endpoint()  # type: ignore[attr-defined]
+    endpoint = comtrade._resolve_endpoint(*path_segments)  # type: ignore[attr-defined]
     debug_params = dict(params)
     if os.getenv("COMTRADE_KEY"):
         debug_params["subscription-key"] = "***"
     debug_url = f"{endpoint}?{urlencode(debug_params)}"
 
     try:
-        payload = comtrade._request(dict(params))  # type: ignore[attr-defined]
+        payload = comtrade._request(dict(params), path_parts=path_segments)  # type: ignore[attr-defined]
     except Exception as exc:
         return {
             "endpoint": endpoint,
