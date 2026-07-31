@@ -39,6 +39,10 @@ class ComtradeEndpointContractTest(unittest.TestCase):
             with self.assertRaisesRegex(RuntimeError, "historical India"):
                 comtrade._normalize_reporter_code("356")
 
+    def test_retired_india_reporter_environment_is_migrated(self):
+        with patch.dict(os.environ, {"COMTRADE_REPORTER": "356"}, clear=True):
+            self.assertEqual(comtrade._normalize_reporter_code(None), "699")
+
     def test_unkeyed_endpoint_is_public_preview(self):
         with patch.dict(os.environ, {}, clear=True):
             parts = comtrade._build_path_segments("C", "M", "HS")

@@ -587,20 +587,26 @@ def _build_periods(from_period: str, to_period: str) -> List[str]:
 
 
 def _normalize_reporter_code(value: Optional[str]) -> str:
-    for candidate in (
-        value,
-        os.getenv("COMTRADE_REPORTER_CODE"),
-        os.getenv("COMTRADE_REPORTER"),
+    for candidate, is_explicit in (
+        (value, True),
+        (os.getenv("COMTRADE_REPORTER_CODE"), False),
+        (os.getenv("COMTRADE_REPORTER"), False),
     ):
         normalized = (candidate or "").strip()
         if not normalized:
             continue
         if normalized.isdigit():
             if normalized == "356":
-                raise ComtradeConfigurationError(
-                    "Reporter code 356 is historical India and has no current "
-                    "monthly data; remove the override or use 699"
+                if is_explicit:
+                    raise ComtradeConfigurationError(
+                        "Reporter code 356 is historical India and has no current "
+                        "monthly data; use 699"
+                    )
+                LOGGER.warning(
+                    "Migrating retired India reporter code 356 to current code %s",
+                    DEFAULT_REPORTER_CODE,
                 )
+                return DEFAULT_REPORTER_CODE
             return normalized
         mapped = REPORTER_NAME_MAP.get(normalized.lower())
         if mapped:
