@@ -8,6 +8,23 @@ on:
 jobs:
   test:
     runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_DB: importdependencymap_test
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 12
+    env:
+      DATABASE_URL: postgresql://postgres:postgres@localhost:5432/importdependencymap_test
+      TEST_DATABASE_URL: postgresql://postgres:postgres@localhost:5432/importdependencymap_test
     steps:
       - uses: actions/checkout@v4
       - name: Set up Python
@@ -21,11 +38,7 @@ jobs:
           pip install pytest
       - name: Compile server
         run: python -m compileall server
+      - name: Validate browser JavaScript
+        run: node --check client/app.js
       - name: Run tests
-        run: |
-          if pytest; then
-            echo "pytest succeeded";
-          else
-            echo "pytest failed; running unittest discover";
-            python -m unittest discover -s tests;
-          fi
+        run: pytest -q

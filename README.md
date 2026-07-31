@@ -1,197 +1,205 @@
 # Build for India
 
-Build for India helps identify domestic manufacturing opportunities by tracking imports, opportunity scores, and partner concentration for each HS code. The stack pairs a FastAPI backend, Postgres analytics tables, and a lightweight static client served from the same origin. Live trade data is sourced from the UN Comtrade API (HS6 monthly series for India), and the roadmap includes direct DGCI&S/Tradestat, WITS, and data.gov.in integrations.
+Build for India maps India's imports by HS6 commodity, measures import value
+and supplier concentration, and ranks domestic-manufacturing opportunities.
+The app is a FastAPI service backed by Postgres with a static browser client.
+
+## What populates the app
+
+The data pipeline deliberately separates the product catalogue from monthly
+trade facts:
+
+- The official UN Comtrade HS 2022 reference supplies the complete HS6 product
+  catalogue (currently 5,613 leaf commodities). It is synchronized on startup
+  and at the beginning of each Comtrade refresh.
+- Monthly India imports come from UN Comtrade. The current India reporter code
+  is `699`; the retired code `356` does not return current data.
+- A `COMTRADE_KEY` uses the fast authenticated endpoint. Without a key, the ETL
+  uses the anonymous preview endpoint in complete one-month/exact-code batches
+  so its 500-row ceiling cannot silently truncate the catalogue.
+- World-total rows drive import-value time series. Country rows are kept
+  separate so partner concentration cannot double-count World plus countries.
+- Product-detail partner data is fetched from Comtrade for the latest loaded
+  month when no partner breakdown is stored locally.
+
+The ETL reads current Comtrade v1 fields such as `cmdDesc`, `primaryValue`,
+`netWgt`, `qty`, and `partnerISO`, while retaining compatibility with older
+field names.
 
 ## Requirements
+
 - Python 3.10+
-- Postgres database (Railway recommended)
-- Environment variables:
-  - `DATABASE_URL` – Postgres URL (`?sslmode=require` for managed DBs)
-  - `ADMIN_KEY` – bearer token for admin routes
-  - `COMTRADE_BASE` (optional) – defaults to `https://comtradeapi.un.org/public/v1/preview`
-  - `COMTRADE_FLOW` (default `import`), `COMTRADE_REPORTER` (default `India`), `COMTRADE_FREQ` (default `M`)
-  - `COMTRADE_REPORTER_CODE`, `COMTRADE_PARTNER`/`COMTRADE_PARTNER_CODE`, `COMTRADE_PATH` – optional overrides for API routing
-  - `FX_RATES_FILE` – path to monthly USD→INR CSV (defaults to `data/fx_rates.csv`)
-  - `DGCIS_DEFAULT_PATH` – optional default path for DGCI&S CSV exports (`data/dgcis_latest.csv`)
-  - Optional observability keys: `SENTRY_DSN`, `GA_MEASUREMENT_ID`
+- Postgres
+- `DATABASE_URL`
+- `ADMIN_KEY` for protected refresh routes
 
-Copy `.env.example`, fill the values, and never commit live secrets.
+Copy `.env.example` to `.env` and set the required values. Never commit live
+keys.
 
-## Local Development
+Important configuration:
+
+- `COMTRADE_KEY` — optional subscription key; strongly recommended for fast
+  complete refreshes.
+- `COMTRADE_BASE` — normally leave blank so the app selects the correct keyed
+  or anonymous endpoint automatically.
+- `COMTRADE_REPORTER_CODE` — defaults to current India code `699`.
+- `COMTRADE_FLOW` — defaults to `import`.
+- `COMTRADE_LOOKBACK_MONTHS` — nightly history window, at least 13 and default
+  18 months.
+- `COMTRADE_MIN_PRODUCTS_PER_PERIOD` — completeness guard, default 1,000
+  distinct HS6 products per India month.
+- `COMTRADE_SYNC_CATALOG_ON_STARTUP` — defaults to `true`; set `false` only if
+  startup must avoid the reference download.
+- `FX_RATES_FILE` — monthly USD-to-INR CSV, default
+  `data/fx_rates.csv`.
+- `DGCIS_DEFAULT_PATH` — optional DGCI&S export path, default
+  `data/dgcis_latest.csv`.
+
+## Local development
+
 ```bash
 python -m venv .venv
 source .venv/bin/activate
 pip install -r requirements.txt
+pip install pytest
 uvicorn server.main:app --host 0.0.0.0 --port 8000
 ```
 
-The API serves the static client at `/` when `client/` exists. Alternatively run `python -m http.server --directory client 8080` during development.
+The service hosts the client at `/` and assets at `/static`.
 
-### Seeding & Metrics
+Run validation:
+
 ```bash
-export ADMIN_KEY=dev-secret
+pytest -q
+python -m compileall server
+node --check client/app.js
+```
+
+## Refreshing data
+
+Refresh an explicit inclusive range:
+
+```bash
+curl -fsS -X POST \
+  -H "Authorization: Bearer $ADMIN_KEY" \
+  "http://localhost:8000/admin/etl/comtrade?from=2025-01&to=2026-04"
+```
+
+With `COMTRADE_KEY`, let the server determine an availability-aware rolling
+window:
+
+```bash
+curl -fsS -X POST \
+  -H "Authorization: Bearer $ADMIN_KEY" \
+  "http://localhost:8000/admin/etl/nightly"
+```
+
+Requested dates are capped to the latest period reported by Comtrade. A
+refresh fails loudly on API validation errors, count mismatches, or possible
+record-limit truncation instead of persisting a partial response.
+
+Optional admin helpers:
+
+```bash
 ./scripts/seed_local.sh http://localhost:8000
 ./scripts/recompute_local.sh http://localhost:8000
-./scripts/load_dgcis.sh data/dgcis_sample.csv http://localhost:8000
-```
-These scripts call the protected admin endpoints, populating sample HS data from `data/top100_hs.csv`, ingesting DGCI&S CSV exports, and recomputing baselines/opportunity scores.
-
-### Database Requirement
-`DATABASE_URL` must be configured. Admin endpoints and API queries fail fast when the database is unreachable to prevent serving stale placeholder data.
-
-- No fallback dataset is bundled at runtime—the API always queries Postgres. If you need demo content, run the admin seed task (below) after connecting a database.
-
-### Seed CSV (optional)
-`data/top100_hs.csv` contains a curated starter list that can be ingested via `/admin/seed` after the database connection is working. It is purely a bootstrap aid and is not used automatically or read on startup.
-
-## Data Sources
-
-- **UN Comtrade** – live HS6 monthly import data for India accessed via the public API. All automated ETL jobs and analytics run on this feed today.
-- **DGCI&S manual CSV ingests** – optional, triggered via `POST /admin/etl/dgcis` after you export a CSV from tradestat.commerce.gov.in. These loads share the same normalization and recompute steps but require you to place the CSV on disk first.
-
-
-## ETL & Automation
-- `POST /admin/etl/comtrade?from=YYYY-MM&to=YYYY-MM` downloads monthly UN Comtrade data (HS6), upserts products/imports, and recomputes metrics.
-- `POST /admin/etl/dgcis?file_path=...` ingests DGCI&S CSV exports (USD/INR values, partner mix) and recomputes analytics.
-- `.github/workflows/ci.yml` installs dependencies, runs `python -m compileall server`, and executes tests.
-- `.github/workflows/nightly_etl.yml` triggers the Comtrade ETL and recompute every night at 03:00 UTC. Configure repository secrets `ADMIN_KEY` and `DEPLOY_URL`.
-
-### Data Model Snapshot
-```sql
-CREATE TABLE products (
-  hs_code TEXT PRIMARY KEY,
-  title TEXT,
-  description TEXT,
-  sectors TEXT[],
-  granularity INT DEFAULT 6,
-  capex_min NUMERIC,
-  capex_max NUMERIC,
-  created_at timestamptz DEFAULT now(),
-  updated_at timestamptz DEFAULT now()
-);
-
-CREATE TABLE monthly_imports (
-  id SERIAL PRIMARY KEY,
-  hs_code TEXT REFERENCES products(hs_code),
-  year INT,
-  month INT,
-  value_usd NUMERIC,
-  qty NUMERIC,
-  partner_country TEXT,
-  UNIQUE (hs_code, year, month, partner_country)
-);
-
-CREATE TABLE import_progress (
-  hs_code TEXT PRIMARY KEY REFERENCES products(hs_code),
-  baseline_12m_usd NUMERIC,
-  current_12m_usd NUMERIC,
-  reduction_abs NUMERIC,
-  reduction_pct NUMERIC,
-  hhi_baseline NUMERIC,
-  hhi_current NUMERIC,
-  concentration_shift NUMERIC,
-  opportunity_score NUMERIC,
-  last_updated timestamptz DEFAULT now()
-);
-
-CREATE TABLE domestic_capability (
-  id SERIAL PRIMARY KEY,
-  hs_code TEXT REFERENCES products(hs_code),
-  capex_min NUMERIC,
-  capex_max NUMERIC,
-  machines JSONB,
-  skills JSONB,
-  notes TEXT,
-  source TEXT,
-  verified BOOLEAN DEFAULT false,
-  created_at timestamptz DEFAULT now()
-);
-
-
-
-```
-- `Normalized(ImportValue)`: log1p of the rolling 12-month USD import, min–max scaled (`server/util.py::norm_log`).
-- `SupplierConcentration`: Herfindahl index of partner-country shares, using `1 - HHI` to reward diversified imports (`server/util.py::hhi_from_shares`).
-- `TechFeasibilityScore`: heuristic per sector (`server/util.py::tech_feasibility_for`), to be refined with granular tags/ML in future.
-- `PolicySupportFactor`: defaults to `1.0`; elevate to `>1.0` when PLI/Make-in-India incentives apply (via WITS/policy data).
-
-## Product Vision (MVP)
-- **Home dashboard** highlighting top imported items by value, trending surges, and a map of source-country dependence.
-- **HS search & detail** surfaces monthly import charts, top partners, tariffs/policy flags, opportunity scores, CAPEX/OPEX ranges, required machinery, skill tiers, and localisation guidance.
-- **Business case generator** estimates revenue, payback, and break-even given factory size, price, and import-replacement assumptions.
-- **Compare view** juxtaposes HS items or supplier countries for strategy decisions.
-- **Alerts & watchlist** trigger when YoY import growth spikes or single-country dependence exceeds thresholds.
-- **Community registry** for machine vendors, tooling suppliers, and contract manufacturers (crowdsourced + verified).
-- **APIs & downloads** provide CSV/JSON exports per HS item. Current REST endpoints ship today; richer download tooling is planned.
-
-## Testing
-- Add tests under `tests/` using `pytest` (fallback to `python -m unittest discover`).
-- Run `pytest` locally before opening a PR.
-- Ensure `python -m compileall server` passes to catch syntax issues.
-
-## Deployment (Railway)
-1. Provision a Railway service with Postgres.
-2. Set environment variables above in **Project → Variables**.
-3. Use the start command: `uvicorn server.main:app --host 0.0.0.0 --port $PORT`.
-4. Optionally create a nightly job to hit `/admin/etl/comtrade` and `/admin/recompute` (see workflow for reference).
-
-Seed or refresh data after deployment:
-
-=======
-
-
-### Opportunity Scoring
-```
-OpportunityScore = Normalized(ImportValue) * (1 - SupplierConcentration) * TechFeasibilityScore * PolicySupportFactor
-```
-- `Normalized(ImportValue)`: log1p of the rolling 12-month USD import, min–max scaled (`server/util.py::norm_log`).
-- `SupplierConcentration`: Herfindahl index of partner-country shares, using `1 - HHI` to reward diversified imports (`server/util.py::hhi_from_shares`).
-- `TechFeasibilityScore`: heuristic per sector (`server/util.py::tech_feasibility_for`), to be refined with granular tags/ML in future.
-- `PolicySupportFactor`: defaults to `1.0`; elevate to `>1.0` when PLI/Make-in-India incentives apply (via WITS/policy data).
-
-## Product Vision (MVP)
-- **Home dashboard** highlighting top imported items by value, trending surges, and a map of source-country dependence.
-- **HS search & detail** surfaces monthly import charts, top partners, tariffs/policy flags, opportunity scores, CAPEX/OPEX ranges, required machinery, skill tiers, and localisation guidance.
-- **Business case generator** estimates revenue, payback, and break-even given factory size, price, and import-replacement assumptions.
-- **Compare view** juxtaposes HS items or supplier countries for strategy decisions.
-- **Alerts & watchlist** trigger when YoY import growth spikes or single-country dependence exceeds thresholds.
-- **Community registry** for machine vendors, tooling suppliers, and contract manufacturers (crowdsourced + verified).
-- **APIs & downloads** provide CSV/JSON exports per HS item. Current REST endpoints ship today; richer download tooling is planned.
-
-## Testing
-- Add tests under `tests/` using `pytest` (fallback to `python -m unittest discover`).
-- Run `pytest` locally before opening a PR.
-- Ensure `python -m compileall server` passes to catch syntax issues.
-
-## Deployment (Railway)
-1. Provision a Railway service with Postgres.
-2. Set environment variables above in **Project → Variables**.
-3. Use the start command: `uvicorn server.main:app --host 0.0.0.0 --port $PORT`.
-4. Optionally create a nightly job to hit `/admin/etl/comtrade` and `/admin/recompute` (see workflow for reference).
-
-Seed or refresh data after deployment:
-
-```bash
-curl -X POST \
-  -H "Authorization: Bearer $ADMIN_KEY" \
-  "$RAILWAY_URL/admin/seed"
+./scripts/load_dgcis.sh data/dgcis_latest.csv http://localhost:8000
 ```
 
-## API Surface
+The seed file is demo-only. It is never a fallback for a failed live refresh.
+
+## Data sources
+
+### Primary source: UN Comtrade
+
+- [API documentation](https://uncomtrade.org/docs/un-comtrade-api/)
+- [API limits and subscription tiers](https://uncomtrade.org/docs/subscriptions/)
+- [HS 2022 reference](https://comtradeapi.un.org/files/v1/app/reference/H6.json)
+- [Reporter reference](https://comtradeapi.un.org/files/v1/app/reference/Reporters.json)
+
+UN Comtrade is the best automated international source for this public app.
+Review its [use and redistribution guidance](https://uncomtrade.org/docs/faqs-on-use-and-re-dissemination/)
+before publishing bulk downloads or redistributing raw records.
+
+### Better India-specific source: DGCI&S
+
+For production-grade India analysis, the preferred source is the Department of
+Commerce/DGCI&S:
+
+- [TradeStat commodity-wise imports](https://tradestat.commerce.gov.in/meidb/commoditywise_import)
+- [Trade Intelligence and Analytics portal](https://trade-analytics.commerce.gov.in/public/indiaTrade)
+
+DGCI&S is more authoritative for India and provides HS8 detail, but it does
+not expose a documented stable public API for this workflow. The safe
+integration is a scheduled or manual official CSV export through
+`POST /admin/etl/dgcis`, not brittle screen scraping. UN Comtrade remains the
+automated fallback and cross-country comparison source.
+
+## API
+
+Public routes:
+
 - `GET /health`
-- `POST /admin/seed`
-- `POST /admin/etl/comtrade`
-- `POST /admin/etl/dgcis`
-- `POST /admin/recompute`
-- `GET /api/products`
-- `GET /api/products/{hs}`
+- `GET /api/products?limit=500&offset=0`
+- `GET /api/products/{hs_code}`
 - `GET /api/leaderboard`
+- `GET /api/domestic_capability/{hs_code}`
 - `POST /api/domestic_capability`
-- `GET /api/domestic_capability/{hs}`
 
-Responses include `source` and `last_updated` metadata so the client can communicate freshness.
+Protected routes:
 
-## Donations
-Support future roadmap items (DGCI&S ETL, policy overlays, supplier registry) via:
-- GitHub Sponsors – coming soon
-- Open Collective – coming soon
+- `POST /admin/etl/comtrade?from=YYYY-MM&to=YYYY-MM`
+- `POST /admin/etl/comtrade/catalog`
+- `GET /admin/etl/comtrade/availability`
+- `POST /admin/etl/nightly`
+- `POST /admin/etl/dgcis?file_path=...`
+- `POST /admin/recompute`
+- `POST /admin/seed`
+- `GET /admin/diag`
+
+Product listing responses include `total`, `offset`, `limit`, `source`,
+`latest_period`, and `last_updated`. The client follows pagination until it
+has received the complete filtered result.
+
+## Data model and scoring
+
+`monthly_imports` identifies each row by HS code, year, month, partner, and
+source. `is_aggregate=true` marks World-total rows. This allows Comtrade and
+DGCI&S records to coexist without treating the World aggregate as a supplier.
+
+The current opportunity score is:
+
+```text
+normalized_import_value × (1 - HHI) × technical_feasibility × policy_factor
+```
+
+When stored partner detail is unavailable, HHI and the combined opportunity
+score remain unavailable rather than treating an unknown supplier mix as
+perfect diversification. Import values still populate, and a short anonymous
+live partner snapshot is shown on product detail. Missing values are never
+rendered as zero.
+
+## Railway deployment
+
+1. Provision a Railway web service and Postgres database.
+2. Set `DATABASE_URL`, `ADMIN_KEY`, and optionally `COMTRADE_KEY`.
+3. Start with:
+
+   ```bash
+   uvicorn server.main:app --host 0.0.0.0 --port $PORT
+   ```
+
+4. Configure GitHub Actions secrets `DEPLOY_URL` and `ADMIN_KEY` for
+   `.github/workflows/nightly_etl.yml`.
+5. Manually dispatch `nightly-etl` once with `lookback_months=18` after the
+   first deployment, then verify `/admin/diag`.
+
+The scheduled workflow refreshes the two latest available Comtrade months.
+Anonymous preview mode is partitioned into one-month HTTP requests to stay
+inside Railway's request-duration limit, then analytics are recomputed once.
+With `COMTRADE_KEY`, the direct `/admin/etl/nightly` endpoint remains the fast
+single-request path.
+
+## License and community
+
+See `LICENSE`, `CONTRIBUTING.md`, `CODE_OF_CONDUCT.md`, and `SECURITY.md`.

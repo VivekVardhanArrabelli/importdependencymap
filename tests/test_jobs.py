@@ -28,6 +28,26 @@ class WindowingTest(unittest.TestCase):
         april_entry = next(row for row in latest_window if (row.year, row.month) == (2023, 4))
         self.assertEqual(april_entry.total, 0.0)
 
+    def test_complete_reporting_bounds_zero_fill_sparse_product(self):
+        window = jobs._window_of_12(
+            [],
+            latest=True,
+            bounds=((2025, 5), (2026, 4)),
+        )
+
+        self.assertIsNotNone(window)
+        self.assertEqual(len(window), 12)
+        self.assertTrue(all(row.total == 0 for row in window))
+
+    def test_unknown_hhi_never_receives_diversification_credit(self):
+        self.assertIsNone(
+            jobs._opportunity_score(1.0, None, ["electronics"])
+        )
+        self.assertAlmostEqual(
+            jobs._opportunity_score(1.0, 0.8, ["electronics"]),
+            0.14,
+        )
+
 
 if __name__ == "__main__":  # pragma: no cover
     unittest.main()

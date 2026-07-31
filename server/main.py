@@ -4,12 +4,13 @@ from __future__ import annotations
 import csv
 import logging
 import os
+import threading
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Annotated
+from typing import Any, Dict, List, Optional
 
 from dotenv import load_dotenv
-from fastapi import Depends, FastAPI, Header, HTTPException, Query, Request, status
+from fastapi import Depends, FastAPI, HTTPException, Query, Request, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, HTMLResponse
 from fastapi.staticfiles import StaticFiles
@@ -119,6 +120,26 @@ def _parse_csv_row(row: Dict[str, str]) -> Dict[str, Any]:
     }
 
 
+def _env_enabled(name: str, *, default: bool) -> bool:
+    value = os.getenv(name)
+    if value is None:
+        return default
+    return value.strip().lower() not in {"0", "false", "no", "off"}
+
+
+def _sync_catalog_after_startup() -> None:
+    try:
+        catalogue = comtrade.fetch_product_catalog(
+            timeout_seconds=12,
+            max_retries=2,
+        )
+        with db.connect() as conn:
+            synced = comtrade.sync_product_catalog(conn, catalogue)
+        LOGGER.info("Comtrade HS6 catalogue ready: %s products", synced)
+    except Exception as exc:  # upstream catalogue is best effort on startup
+        LOGGER.warning("Comtrade catalogue background sync skipped: %s", exc)
+
+
 @app.on_event("startup")
 def ensure_schema() -> None:
     try:
@@ -128,6 +149,16 @@ def ensure_schema() -> None:
             db.init_db(conn)
     except Exception as exc:  # pragma: no cover - best effort
         LOGGER.warning("Database init skipped: %s", exc)
+        return
+
+    if not _env_enabled("COMTRADE_SYNC_CATALOG_ON_STARTUP", default=True):
+        return
+
+    threading.Thread(
+        target=_sync_catalog_after_startup,
+        name="comtrade-catalog-sync",
+        daemon=True,
+    ).start()
 
 
 @app.get("/", include_in_schema=False)
@@ -177,6 +208,8 @@ def seed_database(request: Request) -> Dict[str, Any]:
                         fx_rate=None,
                         qty=None,
                         partner=row["top_country"],
+                        source="seed",
+                        is_aggregate=False,
                     )
                     monthly_count += 1
 
@@ -205,11 +238,76 @@ def _parse_period(period: str) -> datetime:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"Invalid period: {period}") from exc
 
 
+def _refresh_comtrade(
+    *,
+    from_period: str,
+    to_period: str,
+    sync_catalog: bool = True,
+    recompute: bool = True,
+) -> Dict[str, Any]:
+    """Persist the catalogue first, then atomically refresh facts and metrics.
+
+    The separate catalogue transaction ensures all HS6 products remain
+    discoverable even if the upstream fact refresh subsequently fails.
+    """
+
+    if sync_catalog:
+        catalogue = comtrade.fetch_product_catalog()
+        with db.connect() as conn:
+            catalog_count = comtrade.sync_product_catalog(conn, catalogue)
+    else:
+        with db.connect() as conn:
+            stored = db.fetch_product_catalog(conn)
+        catalogue = [
+            comtrade.CatalogProduct(
+                hs_code=str(item["hs_code"]),
+                title=str(item.get("title") or f"HS {item['hs_code']}"),
+                description=str(item.get("description") or item.get("title") or ""),
+                sectors=list(item.get("sectors") or []),
+            )
+            for item in stored
+        ]
+        if len(catalogue) < 1_000:
+            raise comtrade.ComtradeError(
+                "Stored HS6 catalogue is incomplete; synchronize the catalogue first"
+            )
+        catalog_count = len(catalogue)
+
+    with db.connect() as conn:
+        summary = comtrade.run(
+            conn,
+            from_period=from_period,
+            to_period=to_period,
+            catalog_products=catalogue,
+            sync_catalog=False,
+        )
+        baseline_summary = jobs.recompute_baseline(conn) if recompute else None
+        progress_summary = jobs.recompute_progress(conn) if recompute else None
+
+    summary.update(
+        {
+            "catalog_products": catalog_count,
+            "baseline": baseline_summary,
+            "progress": progress_summary,
+            "last_updated": datetime.now(timezone.utc).isoformat(),
+        }
+    )
+    return summary
+
+
 @app.post("/admin/etl/comtrade")
 def trigger_comtrade(
     request: Request,
     from_period: str = Query(..., alias="from", description="YYYY-MM inclusive start"),
     to_period: str = Query(..., alias="to", description="YYYY-MM inclusive end"),
+    sync_catalog: bool = Query(
+        default=True,
+        description="Refresh the official HS6 catalogue before loading facts",
+    ),
+    recompute: bool = Query(
+        default=True,
+        description="Recompute all analytics after loading facts",
+    ),
 ) -> Dict[str, Any]:
     _verify_admin(request)
     _require_database_url()
@@ -219,23 +317,37 @@ def trigger_comtrade(
     if start_dt > end_dt:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="from must be <= to")
 
-    with db.connect() as conn:
-        summary = comtrade.run(
-            conn,
-            from_period=start_dt.strftime("%Y-%m"),
-            to_period=end_dt.strftime("%Y-%m"),
-        )
-        baseline_summary = jobs.recompute_baseline(conn)
-        progress_summary = jobs.recompute_progress(conn)
-
-        summary.update(
-        {
-            "baseline": baseline_summary,
-            "progress": progress_summary,
-            "last_updated": datetime.now(timezone.utc).isoformat(),
-        }
+    return _refresh_comtrade(
+        from_period=start_dt.strftime("%Y-%m"),
+        to_period=end_dt.strftime("%Y-%m"),
+        sync_catalog=sync_catalog,
+        recompute=recompute,
     )
-    return summary
+
+
+@app.post("/admin/etl/comtrade/catalog")
+def trigger_comtrade_catalog(request: Request) -> Dict[str, Any]:
+    _verify_admin(request)
+    _require_database_url()
+    catalogue = comtrade.fetch_product_catalog()
+    with db.connect() as conn:
+        synced = comtrade.sync_product_catalog(conn, catalogue)
+    return {
+        "catalog_products": synced,
+        "source": "comtrade_reference",
+        "last_updated": datetime.now(timezone.utc).isoformat(),
+    }
+
+
+@app.get("/admin/etl/comtrade/availability")
+def comtrade_availability(request: Request) -> Dict[str, Any]:
+    _verify_admin(request)
+    result = comtrade.latest_available_period()
+    return {
+        **result,
+        "source": "comtrade",
+        "last_updated": datetime.now(timezone.utc).isoformat(),
+    }
 
 
 @app.post("/admin/etl/dgcis")
@@ -297,6 +409,7 @@ def admin_diagnostics(request: Request) -> Dict[str, Any]:
         "COMTRADE_FLOW": bool(os.getenv("COMTRADE_FLOW")),
         "COMTRADE_REPORTER": bool(os.getenv("COMTRADE_REPORTER")),
         "COMTRADE_FREQ": bool(os.getenv("COMTRADE_FREQ")),
+        "COMTRADE_KEY": bool(os.getenv("COMTRADE_KEY")),
     }
 
     # Filesystem checks
@@ -320,10 +433,19 @@ def admin_diagnostics(request: Request) -> Dict[str, Any]:
         resolved_endpoint = comtrade._resolve_endpoint()  # type: ignore[attr-defined]
     except Exception as exc:  # pragma: no cover - diagnostics only
         resolved_endpoint = f"error: {exc}"
+    try:
+        resolved_reporter = comtrade._normalize_reporter_code(None)  # type: ignore[attr-defined]
+    except Exception as exc:  # pragma: no cover - diagnostics only
+        resolved_reporter = f"error: {exc}"
 
     # DB checks
     db_ok = False
-    counts: Dict[str, Any] = {"products": None, "monthly_imports": None}
+    counts: Dict[str, Any] = {
+        "products": None,
+        "monthly_imports": None,
+        "aggregate_monthly_imports": None,
+        "latest_period": None,
+    }
     try:
         _require_database_url()
         with db.connect() as conn:
@@ -332,6 +454,14 @@ def admin_diagnostics(request: Request) -> Dict[str, Any]:
                 counts["products"] = int(cur.fetchone()["c"])  # type: ignore[index]
                 cur.execute("SELECT COUNT(*) AS c FROM monthly_imports")
                 counts["monthly_imports"] = int(cur.fetchone()["c"])  # type: ignore[index]
+                cur.execute(
+                    "SELECT COUNT(*) AS c FROM monthly_imports WHERE is_aggregate = true"
+                )
+                counts["aggregate_monthly_imports"] = int(cur.fetchone()["c"])  # type: ignore[index]
+                latest = db.latest_year_month(conn)
+                counts["latest_period"] = (
+                    f"{latest[0]:04d}-{latest[1]:02d}" if latest else None
+                )
         db_ok = True
     except Exception as exc:  # pragma: no cover - diagnostics only
         counts["error"] = str(exc)
@@ -340,6 +470,7 @@ def admin_diagnostics(request: Request) -> Dict[str, Any]:
         "env": env,
         "seed_csv": seed_info,
         "comtrade_endpoint": resolved_endpoint,
+        "comtrade_reporter": resolved_reporter,
         "db_ok": db_ok,
         "counts": counts,
         "source": ADMIN_SOURCE,
@@ -351,32 +482,30 @@ def admin_diagnostics(request: Request) -> Dict[str, Any]:
 def trigger_nightly(request: Request) -> Dict[str, Any]:
     """Convenience endpoint for Railway HTTP Cron.
 
-    Computes from/to as 13 months ago to last full month (UTC) and runs
-    the Comtrade ETL followed by recompute.
+    Requests enough history to retain a 12-month analytics window even when
+    India's latest Comtrade release lags the current calendar month.
     """
     _verify_admin(request)
     _require_database_url()
+    if not (os.getenv("COMTRADE_KEY") or "").strip():
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=(
+                "A single-request nightly refresh requires COMTRADE_KEY. "
+                "Use the partitioned GitHub workflow for anonymous preview mode."
+            ),
+        )
 
     # Compute the month range in UTC
     today_utc = datetime.now(timezone.utc)
-    start_month = (today_utc.replace(day=1) - relativedelta(months=13)).strftime("%Y-%m")
+    lookback_months = max(int(os.getenv("COMTRADE_LOOKBACK_MONTHS", "18")), 13)
+    start_month = (
+        today_utc.replace(day=1) - relativedelta(months=lookback_months)
+    ).strftime("%Y-%m")
     end_month = (today_utc.replace(day=1) - relativedelta(months=1)).strftime("%Y-%m")
 
-    # Pass YYYY-MM strings to ETL (expected by comtrade.run)
-    with db.connect() as conn:
-        summary = comtrade.run(conn, from_period=start_month, to_period=end_month)
-        baseline_summary = jobs.recompute_baseline(conn)
-        progress_summary = jobs.recompute_progress(conn)
-
-    summary.update(
-        {
-            "baseline": baseline_summary,
-            "progress": progress_summary,
-            "from": start_month,
-            "to": end_month,
-            "last_updated": datetime.now(timezone.utc).isoformat(),
-        }
-    )
+    summary = _refresh_comtrade(from_period=start_month, to_period=end_month)
+    summary.update({"from": start_month, "to": end_month})
     return summary
 
 
@@ -387,7 +516,8 @@ def list_products(
     min_capex: Optional[float] = Query(default=None, ge=0),
     max_capex: Optional[float] = Query(default=None, ge=0),
     sort: str = Query(default="opportunity"),
-    limit: int = Query(default=100, ge=1, le=200),
+    limit: int = Query(default=100, ge=1, le=500),
+    offset: int = Query(default=0, ge=0),
     q: Optional[str] = Query(default=None, alias="q", description="Search by HS code or title"),
 ) -> Dict[str, Any]:
     _require_database_url()
@@ -396,17 +526,21 @@ def list_products(
     if combine not in {"AND", "OR"}:
         combine = "OR"
     sort_map = {
-        "opportunity": "COALESCE(ip.opportunity_score, 0) DESC",
-        "progress": "COALESCE(ip.reduction_pct, 0) DESC",
-        "value": "COALESCE(ip.current_12m_usd, 0) DESC",
+        "opportunity": "COALESCE(ip.opportunity_score, 0) DESC, p.hs_code ASC",
+        "progress": "COALESCE(ip.reduction_pct, 0) DESC, p.hs_code ASC",
+        "value": "COALESCE(ip.current_12m_usd, 0) DESC, p.hs_code ASC",
+        "catalog": "p.hs_code ASC",
     }
     order_clause = sort_map.get(sort.lower(), sort_map["opportunity"])
 
+    from_parts = [
+        "FROM products p",
+        "LEFT JOIN import_progress ip ON ip.hs_code = p.hs_code",
+    ]
     query_parts = [
         "SELECT p.hs_code, p.title, p.description, p.sectors, p.capex_min, p.capex_max,",
         "       ip.current_12m_usd, ip.reduction_pct, ip.opportunity_score, ip.last_updated",
-        "FROM products p",
-        "LEFT JOIN import_progress ip ON ip.hs_code = p.hs_code",
+        *from_parts,
     ]
     params: List[Any] = []
     conditions: List[str] = []
@@ -436,11 +570,25 @@ def list_products(
     query_parts.append(f"ORDER BY {order_clause}")
     query_parts.append("LIMIT %s")
     params.append(limit)
+    query_parts.append("OFFSET %s")
+    params.append(offset)
 
     with db.connect() as conn:
         with conn.cursor(cursor_factory=RealDictCursor) as cur:
             cur.execute("\n".join(query_parts), params)
             rows = cur.fetchall()
+            count_query = ["SELECT COUNT(*) AS total", *from_parts]
+            count_params = params[:-2]
+            if conditions:
+                count_query.append("WHERE " + " AND ".join(conditions))
+            cur.execute("\n".join(count_query), count_params)
+            total = int(cur.fetchone()["total"])
+        data_status = db.latest_data_status(conn)
+        latest = (
+            (int(data_status["year"]), int(data_status["month"]))
+            if data_status
+            else None
+        )
 
     items: List[Dict[str, Any]] = []
     last_updated: Optional[str] = None
@@ -464,8 +612,12 @@ def list_products(
     return {
         "items": items,
         "count": len(items),
-        "source": DEFAULT_SOURCE,
+        "total": total,
+        "offset": offset,
+        "limit": limit,
+        "source": data_status.get("source", DEFAULT_SOURCE) if data_status else DEFAULT_SOURCE,
         "last_updated": last_updated,
+        "latest_period": f"{latest[0]:04d}-{latest[1]:02d}" if latest else None,
     }
 
 
@@ -480,7 +632,9 @@ def product_detail(hs_code: str) -> Dict[str, Any]:
                 SELECT p.hs_code, p.title, p.description, p.sectors, p.capex_min, p.capex_max,
                        ip.current_12m_usd, ip.reduction_pct, ip.opportunity_score, ip.last_updated,
                        ip.reduction_abs, ip.hhi_current, ip.hhi_baseline, ip.concentration_shift,
-                       b.baseline_period, b.baseline_12m_usd, b.updated_at
+                       b.baseline_period, b.baseline_12m_usd,
+                       b.updated_at AS baseline_updated_at,
+                       p.updated_at AS product_updated_at
                 FROM products p
                 LEFT JOIN import_progress ip ON ip.hs_code = p.hs_code
                 LEFT JOIN baseline_imports b ON b.hs_code = p.hs_code
@@ -496,14 +650,29 @@ def product_detail(hs_code: str) -> Dict[str, Any]:
         with conn.cursor(cursor_factory=RealDictCursor) as cur:
             cur.execute(
                 """
-                SELECT partner_country, SUM(value_usd) AS total
-                FROM monthly_imports
-                WHERE hs_code = %s
-                GROUP BY partner_country
+                WITH latest_partner_period AS (
+                    SELECT year, month
+                    FROM monthly_imports
+                    WHERE hs_code = %s
+                      AND is_aggregate = false
+                      AND source IN ('dgcis', 'comtrade_partner')
+                    ORDER BY year DESC, month DESC
+                    LIMIT 1
+                )
+                SELECT mi.partner_country, SUM(mi.value_usd) AS total,
+                       SUM(SUM(mi.value_usd)) OVER () AS grand_total,
+                       mi.year, mi.month, MIN(mi.source) AS source
+                FROM monthly_imports mi
+                JOIN latest_partner_period latest
+                  ON latest.year = mi.year AND latest.month = mi.month
+                WHERE mi.hs_code = %s
+                  AND mi.is_aggregate = false
+                  AND mi.source IN ('dgcis', 'comtrade_partner')
+                GROUP BY mi.partner_country, mi.year, mi.month
                 ORDER BY total DESC
-                LIMIT 5
+                LIMIT 10
                 """,
-                (hs_code,),
+                (hs_code, hs_code),
             )
             partners = cur.fetchall()
 
@@ -536,14 +705,48 @@ def product_detail(hs_code: str) -> Dict[str, Any]:
         {
             "partner_country": item.get("partner_country"),
             "value_usd": float(item.get("total") or 0),
+            "share": (
+                float(item.get("total") or 0) / float(item["grand_total"])
+                if item.get("grand_total") not in (None, 0)
+                else None
+            ),
         }
         for item in partners
     ]
+    partner_period: Optional[str] = None
+    partner_source: Optional[str] = None
+    snapshot_hhi: Optional[float] = None
+    if partner_payload:
+        partner_period = f"{int(partners[0]['year']):04d}{int(partners[0]['month']):02d}"
+        partner_source = str(partners[0].get("source") or "database")
+    elif timeseries_payload:
+        partner_period = (
+            f"{timeseries_payload[-1]['year']:04d}"
+            f"{timeseries_payload[-1]['month']:02d}"
+        )
+        try:
+            snapshot = comtrade.fetch_partner_snapshot(hs_code, partner_period)
+            partner_payload = list(snapshot.get("partners") or [])[:10]
+            snapshot_hhi = (
+                float(snapshot["hhi"]) if snapshot.get("hhi") is not None else None
+            )
+            partner_source = str(snapshot.get("source") or "comtrade")
+        except Exception as exc:  # upstream detail is best-effort
+            LOGGER.warning(
+                "Partner snapshot unavailable for %s %s: %s",
+                hs_code,
+                partner_period,
+                exc,
+            )
 
     progress_payload = {
         "reduction_abs": float(row["reduction_abs"]) if row.get("reduction_abs") is not None else None,
         "reduction_pct": float(row["reduction_pct"]) if row.get("reduction_pct") is not None else None,
-        "hhi_current": float(row["hhi_current"]) if row.get("hhi_current") is not None else None,
+        "hhi_current": (
+            float(row["hhi_current"])
+            if row.get("hhi_current") is not None
+            else snapshot_hhi
+        ),
         "hhi_baseline": float(row["hhi_baseline"]) if row.get("hhi_baseline") is not None else None,
         "concentration_shift": float(row["concentration_shift"]) if row.get("concentration_shift") is not None else None,
         "opportunity_score": product_card.opportunity_score,
@@ -556,9 +759,25 @@ def product_detail(hs_code: str) -> Dict[str, Any]:
         "baseline_period": row.get("baseline_period"),
         "timeseries": timeseries_payload,
         "partners": partner_payload,
+        "partner_period": partner_period,
+        "partner_source": partner_source,
         "progress": progress_payload,
         "source": DEFAULT_SOURCE,
-        "last_updated": product_card.last_updated or (row.get("updated_at").isoformat() if row.get("updated_at") else None),
+        "last_updated": product_card.last_updated
+        or (
+            row["baseline_updated_at"].isoformat()
+            if row.get("baseline_updated_at")
+            else (
+                row["product_updated_at"].isoformat()
+                if row.get("product_updated_at")
+                else None
+            )
+        ),
+        "latest_period": (
+            f"{timeseries_payload[-1]['year']:04d}-{timeseries_payload[-1]['month']:02d}"
+            if timeseries_payload
+            else None
+        ),
     }
 
 
@@ -665,8 +884,8 @@ def comtrade_probe(
     period: str = Query(..., description="YYYY-MM or YYYYMM"),
     freq: str = Query(default="M", description="M=monthly, A=annual"),
     cmd: str = Query(default="TOTAL", description="HS code or TOTAL"),
-    reporter: Optional[str] = Query(default=None, description="Override reporterCode (e.g., 356)"),
-    flow: Optional[str] = Query(default=None, description="Override rgCode/trade flow (1=Import,2=Export)"),
+    reporter: Optional[str] = Query(default=None, description="Override reporterCode (India is 699)"),
+    flow: Optional[str] = Query(default=None, description="Override flowCode (M=Import, X=Export)"),
     partner: Optional[str] = Query(default=None, description="Optional partnerCode (0 for World)"),
 ) -> Dict[str, Any]:
     _verify_admin(request)
@@ -688,7 +907,12 @@ def comtrade_probe(
         "flowCode": flow_code,
         "period": p,
         "cmdCode": cmd,
-        "includeDesc": "false",
+        "includeDesc": "true",
+        "breakdownMode": "classic",
+        "partner2Code": "0",
+        "customsCode": "C00",
+        "motCode": "0",
+        "maxRecords": "500",
     }
     if partner:
         params["partnerCode"] = partner

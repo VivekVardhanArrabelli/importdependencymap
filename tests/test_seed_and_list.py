@@ -1,5 +1,6 @@
 import os
 import unittest
+from unittest.mock import patch
 
 from fastapi import HTTPException
 
@@ -11,8 +12,9 @@ class SeedAndListingTest(unittest.TestCase):
         os.environ.pop("DATABASE_URL", None)
 
     def test_seed_requires_database(self):
-        with self.assertRaises(HTTPException) as ctx:
-            main.seed_database(None)
+        with patch("server.main._verify_admin"):
+            with self.assertRaises(HTTPException) as ctx:
+                main.seed_database(None)
         self.assertEqual(ctx.exception.status_code, 500)
 
     def test_listing_requires_database(self):

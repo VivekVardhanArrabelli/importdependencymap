@@ -1,13 +1,24 @@
 const state = {
   products: [],
+  total: 0,
+  source: null,
+  lastUpdated: null,
+  latestPeriod: null,
   lastFetched: null,
   selected: null,
   trendChart: null,
   partnerChart: null,
   watchlist: restoreJSON('bfi_watchlist', []),
   community: [],
-  viewMode: 'grid' // 'grid' or 'table'
+  viewMode: 'grid', // 'grid' or 'table'
+  loadRequestId: 0,
+  productAbortController: null
 };
+
+const PRODUCT_PAGE_SIZE = 500;
+const MAX_PRODUCT_PAGES = 1000;
+const MAX_RENDERED_PRODUCTS = 240;
+const MAX_COMPARE_OPTIONS = 300;
 
 // Neoclassical Formatters
 const numberFormatter = new Intl.NumberFormat('en-IN', { maximumFractionDigits: 2 });
@@ -42,7 +53,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
 function wireEvents() {
   // Filters & Actions
-  const loadBtn = document.getElementById('loadBtn'); if (loadBtn) loadBtn.addEventListener('click', loadProducts);
+  const loadBtn = document.getElementById('loadBtn'); if (loadBtn) loadBtn.addEventListener('click', () => loadProducts());
   const refreshBtn = document.getElementById('refreshBtn'); if (refreshBtn) refreshBtn.addEventListener('click', () => loadProducts(true));
   const downloadBtn = document.getElementById('downloadCsvBtn'); if (downloadBtn) downloadBtn.addEventListener('click', downloadCsv);
   
@@ -50,7 +61,11 @@ function wireEvents() {
   const bcForm = document.getElementById('businessCaseForm'); if (bcForm) bcForm.addEventListener('submit', handleBusinessCaseSubmit);
   const compareForm = document.getElementById('compareForm'); if (compareForm) compareForm.addEventListener('submit', handleCompareSubmit);
   const communityForm = document.getElementById('communityForm'); if (communityForm) communityForm.addEventListener('submit', handleCommunitySubmit);
-  const searchInput = document.getElementById('search'); if (searchInput) searchInput.addEventListener('input', () => renderResults(filterProducts(state.products)));
+  const searchInput = document.getElementById('search'); if (searchInput) searchInput.addEventListener('input', (event) => {
+    state.searchKeyword = event.currentTarget.value.trim().toLowerCase();
+    if (state.productAbortController) return;
+    renderResults(state.products);
+  });
   
   // Drawer
   const closeBtn = document.getElementById('closeDrawer'); if (closeBtn) closeBtn.addEventListener('click', closeDrawer);
@@ -70,27 +85,148 @@ function switchViewMode(mode) {
   
   document.getElementById('cards').classList.toggle('hidden', mode !== 'grid');
   document.getElementById('tableContainer').classList.toggle('hidden', mode !== 'table');
+  renderResults(state.products);
 }
 
 async function loadProducts(force = false) {
-  try {
-    const params = buildQuery();
-    const response = await fetch(`/api/products?${params.toString()}`);
-    if (!response.ok) throw new Error(`Request failed: ${response.status}`);
-    const data = await response.json();
-    state.products = data.items || [];
+  const requestId = ++state.loadRequestId;
+  if (state.productAbortController) state.productAbortController.abort();
+  const controller = new AbortController();
+  state.productAbortController = controller;
+  const params = buildQuery();
 
-    renderStats(state.products);
+  state.products = [];
+  state.total = 0;
+  state.source = null;
+  state.lastUpdated = null;
+  state.latestPeriod = null;
+  setProductControlsLoading(true);
+  renderProductLoadingState();
+
+  try {
+    const data = await fetchAllProductPages(params, {
+      signal: controller.signal,
+      cache: force ? 'no-store' : 'default'
+    });
+    if (requestId !== state.loadRequestId) return;
+
+    state.products = data.items;
+    state.total = data.total;
+    state.source = data.source;
+    state.lastUpdated = data.last_updated;
+    state.latestPeriod = data.latest_period;
+    state.lastFetched = new Date().toISOString();
+
+    renderStats(state.products, state.total);
     renderResults(state.products);
     renderAlerts(state.products);
     populateCompareOptions(state.products);
+    renderDataStatus();
 
     animateCounters();
-    showToast(`Updated: ${state.products.length} items`);
+    showToast(
+      state.products.length
+        ? `Updated: ${state.products.length} of ${state.total} items`
+        : 'No products matched these filters'
+    );
   } catch (error) {
+    if (error.name === 'AbortError' || requestId !== state.loadRequestId) return;
     console.error(error);
-    showToast('Unable to fetch data', 'error');
+    state.products = [];
+    state.total = 0;
+    state.source = null;
+    state.lastUpdated = null;
+    state.latestPeriod = null;
+    renderProductErrorState(error);
+    showToast('Unable to fetch complete product data', 'error');
+  } finally {
+    if (requestId === state.loadRequestId) {
+      state.productAbortController = null;
+      setProductControlsLoading(false);
+    }
   }
+}
+
+async function fetchAllProductPages(baseParams, options = {}) {
+  const requestedSort = baseParams.get('sort') || 'opportunity';
+  const productsByCode = new Map();
+  const seenPages = new Set();
+  let rawOffset = 0;
+  let reportedTotal = null;
+  let source = null;
+  let lastUpdated = null;
+  let latestPeriod = null;
+  let reachedEnd = false;
+
+  for (let pageNumber = 0; pageNumber < MAX_PRODUCT_PAGES; pageNumber += 1) {
+    const params = new URLSearchParams(baseParams);
+    params.set('sort', 'catalog');
+    params.set('limit', String(PRODUCT_PAGE_SIZE));
+    params.set('offset', String(rawOffset));
+
+    const response = await fetch(`/api/products?${params.toString()}`, options);
+    if (!response.ok) {
+      throw new Error(`Product request failed with status ${response.status}`);
+    }
+
+    const data = await response.json();
+    if (!data || !Array.isArray(data.items)) {
+      throw new Error('Product API returned an invalid response');
+    }
+
+    const pageItems = data.items;
+    const pageTotal = asNonNegativeInteger(data.total);
+    if (pageTotal !== null) reportedTotal = pageTotal;
+    if (data.source != null) source = data.source;
+    lastUpdated = newestTimestamp(lastUpdated, data.last_updated);
+    if (data.latest_period != null) latestPeriod = data.latest_period;
+
+    if (!pageItems.length) {
+      reachedEnd = true;
+      break;
+    }
+
+    const pageFingerprint = pageItems.map((item) => String(item?.hs_code ?? '')).join('|');
+    if (seenPages.has(pageFingerprint)) {
+      throw new Error('Product API repeated a page; loading stopped to avoid an endless loop');
+    }
+    seenPages.add(pageFingerprint);
+
+    pageItems.forEach((item, index) => {
+      const code = item?.hs_code;
+      const key = code == null || code === '' ? `offset:${rawOffset + index}` : `hs:${code}`;
+      if (!productsByCode.has(key)) productsByCode.set(key, item);
+    });
+
+    rawOffset += pageItems.length;
+
+    if (reportedTotal !== null && rawOffset >= reportedTotal) {
+      reachedEnd = true;
+      break;
+    }
+    if (reportedTotal === null && pageItems.length < PRODUCT_PAGE_SIZE) {
+      reachedEnd = true;
+      break;
+    }
+  }
+
+  if (!reachedEnd) {
+    throw new Error(`Product pagination exceeded the ${MAX_PRODUCT_PAGES}-page safety limit`);
+  }
+
+  const items = Array.from(productsByCode.values());
+  if (reportedTotal !== null && items.length < reportedTotal) {
+    throw new Error(`Product API returned only ${items.length} unique records out of ${reportedTotal}`);
+  }
+
+  items.sort(productComparator(requestedSort));
+  return {
+    items,
+    total: Math.max(reportedTotal ?? 0, items.length),
+    source,
+    last_updated: lastUpdated,
+    latest_period: latestPeriod
+  };
 }
 
 function buildQuery() {
@@ -106,7 +242,6 @@ function buildQuery() {
   if (maxCapex) params.set('max_capex', maxCapex);
   if (sort) params.set('sort', sort);
   if (searchValue) params.set('q', searchValue);
-  params.set('limit', 200);
   state.searchKeyword = searchValue.toLowerCase();
   return params;
 }
@@ -122,57 +257,83 @@ function filterProducts(items) {
   });
 }
 
-function renderStats(items) {
-  const total = items.length;
-  const importUsd = items.reduce((acc, item) => acc + (item.last_12m_value_usd || 0), 0);
-  const avgScore = items.length
-    ? items.reduce((acc, item) => acc + (item.opportunity_score || 0), 0) / items.length
-    : 0;
+function renderStats(items, reportedTotal = items.length) {
+  const importValues = items.map((item) => finiteNumber(item.last_12m_value_usd)).filter((value) => value !== null);
+  const scores = items.map((item) => finiteNumber(item.opportunity_score)).filter((value) => value !== null);
+  const importUsd = importValues.length ? importValues.reduce((acc, value) => acc + value, 0) : null;
+  const avgScore = scores.length ? scores.reduce((acc, value) => acc + value, 0) / scores.length : null;
   const alertCount = computeAlerts(items).length;
 
-  if (!document.getElementById('statTotalProducts').textContent.match(/\d/)) {
-  document.getElementById('statTotalProducts').textContent = numberFormatter.format(total);
-  document.getElementById('statImportUsd').textContent = usdFormatter.format(importUsd);
-  document.getElementById('statAvgScore').textContent = avgScore.toFixed(2);
-  document.getElementById('statAlerts').textContent = alertCount;
-  }
+  document.getElementById('statTotalProducts').textContent = numberFormatter.format(reportedTotal);
+  document.getElementById('statImportUsd').textContent = formatValue(importUsd, 'usd');
+  document.getElementById('statAvgScore').textContent = formatMetric(avgScore);
+  document.getElementById('statAlerts').textContent = scores.length ? alertCount : 'Unavailable';
+
+  const importStat = document.getElementById('statImportUsd');
+  importStat.title = metricCoverageTitle('12-month import value', importValues.length, items.length);
+  const scoreStat = document.getElementById('statAvgScore');
+  scoreStat.title = metricCoverageTitle('opportunity score', scores.length, items.length);
+  document.getElementById('statAlerts').title = metricCoverageTitle('opportunity score', scores.length, items.length);
 }
 
 function renderResults(items) {
   const filtered = filterProducts(items);
-  document.getElementById('resultsMeta').textContent = `${filtered.length} records`;
+  const visible = filtered.slice(0, MAX_RENDERED_PRODUCTS);
+  const loadedMeta = `${items.length} of ${state.total} loaded`;
+  const visibleMeta = filtered.length > visible.length
+    ? `${visible.length} shown · ${filtered.length} matches`
+    : `${filtered.length} matches`;
+  document.getElementById('resultsMeta').textContent =
+    filtered.length === items.length
+      ? `${Math.min(visible.length, filtered.length)} shown · ${loadedMeta}`
+      : `${visibleMeta} · ${loadedMeta}`;
   
   // Render Grid
   const cardContainer = document.getElementById('cards');
-  cardContainer.innerHTML = filtered.map(item => `
-    <article class="card" onclick="openDrawer('${item.hs_code}')">
-      <h3><span>${item.title}</span><span>${item.hs_code}</span></h3>
-      <div class="chips">${(item.sectors || []).map(s => `<span class="chip">${s}</span>`).join('')}</div>
-      <div class="meta">12m: ${formatValue(item.last_12m_value_usd, 'usd')}</div>
-      <div class="meta">Score: ${(item.opportunity_score ?? 0).toFixed(2)}</div>
-    </article>
-  `).join('');
-  
-  // Render Table
   const tableBody = document.querySelector('#resultsTable tbody');
-  tableBody.innerHTML = filtered.map(item => `
-    <tr onclick="openDrawer('${item.hs_code}')">
-      <td><strong>${item.hs_code}</strong></td>
-      <td>${item.title}</td>
-      <td>${(item.sectors || []).join(', ')}</td>
-      <td class="text-right">${formatValue(item.last_12m_value_usd, 'usd')}</td>
-      <td class="text-right"><strong>${(item.opportunity_score ?? 0).toFixed(2)}</strong></td>
-      <td class="text-right">→</td>
-    </tr>
-  `).join('');
+  if (!filtered.length) {
+    cardContainer.innerHTML = `
+      <div class="results-state">
+        <strong>No commodities found</strong>
+        <span>Try broadening the search or filters.</span>
+      </div>
+    `;
+    tableBody.innerHTML = '<tr class="state-row"><td colspan="6">No commodities found. Try broadening the search or filters.</td></tr>';
+    return;
+  }
+
+  if (state.viewMode === 'grid') {
+    cardContainer.innerHTML = visible.map(item => `
+      <article class="card" onclick="openDrawer('${escapeHTML(item.hs_code)}')">
+        <h3><span>${escapeHTML(item.title || 'Untitled commodity')}</span><span>${escapeHTML(item.hs_code)}</span></h3>
+        <div class="chips">${(item.sectors || []).map(s => `<span class="chip">${escapeHTML(s)}</span>`).join('')}</div>
+        <div class="meta">12m: ${formatValue(item.last_12m_value_usd, 'usd')}</div>
+        <div class="meta">Score: ${formatMetric(item.opportunity_score)}</div>
+      </article>
+    `).join('');
+    tableBody.innerHTML = '';
+  } else {
+    cardContainer.innerHTML = '';
+    tableBody.innerHTML = visible.map(item => `
+      <tr onclick="openDrawer('${escapeHTML(item.hs_code)}')">
+        <td><strong>${escapeHTML(item.hs_code)}</strong></td>
+        <td>${escapeHTML(item.title || 'Untitled commodity')}</td>
+        <td>${(item.sectors || []).map(escapeHTML).join(', ')}</td>
+        <td class="text-right">${formatValue(item.last_12m_value_usd, 'usd')}</td>
+        <td class="text-right"><strong>${formatMetric(item.opportunity_score)}</strong></td>
+        <td class="text-right">→</td>
+      </tr>
+    `).join('');
+  }
 }
 
 // Drawer Logic
 async function openDrawer(hsCode) {
   try {
-    const response = await fetch(`/api/products/${hsCode}`);
-    if (!response.ok) throw new Error();
+    const response = await fetch(`/api/products/${encodeURIComponent(hsCode)}`);
+    if (!response.ok) throw new Error(`Detail request failed with status ${response.status}`);
     const data = await response.json();
+    if (!data?.product) throw new Error('Product detail response is incomplete');
     state.selected = data;
     
     // Populate Drawer
@@ -184,9 +345,9 @@ async function openDrawer(hsCode) {
     
     // Snapshot
     document.getElementById('detailSnapshot').innerHTML = `
-      <li><span>Opp. Score</span> <strong>${(product.opportunity_score ?? 0).toFixed(2)}</strong></li>
+      <li><span>Opp. Score</span> <strong>${formatMetric(product.opportunity_score)}</strong></li>
       <li><span>Imports (12m)</span> <strong>${formatValue(product.last_12m_value_usd, 'usd')}</strong></li>
-      <li><span>HHI</span> <strong>${(data.progress?.hhi_current ?? 0).toFixed(2)}</strong></li>
+      <li><span>HHI</span> <strong>${formatMetric(data.progress?.hhi_current)}</strong></li>
       <li><span>Capex Range</span> <strong>${formatRange(product.capex_min, product.capex_max)}</strong></li>
     `;
     
@@ -200,6 +361,7 @@ async function openDrawer(hsCode) {
     renderTrendChart(data.timeseries);
     renderPartnerChart(data.partners);
     renderPartnerList(data.partners);
+    renderPartnerMeta(data.partner_period, data.partner_source);
 
     // Open UI
     document.getElementById('drawerBackdrop').classList.remove('hidden');
@@ -208,6 +370,7 @@ async function openDrawer(hsCode) {
     
   } catch (e) {
     console.error(e);
+    state.selected = null;
     showToast('Could not load details', 'error');
   }
 }
@@ -246,7 +409,7 @@ function toggleWatchFromDrawer() {
 function renderTrendChart(timeseries = []) {
   const ctx = document.getElementById('trendChart');
   const labels = timeseries.map(d => `${d.year}-${String(d.month).padStart(2,'0')}`);
-  const values = timeseries.map(d => d.value_usd || 0);
+  const values = timeseries.map(d => finiteNumber(d.value_usd));
   if (state.trendChart) state.trendChart.destroy();
   
   Chart.defaults.font.family = "'Tenor Sans', sans-serif";
@@ -269,8 +432,20 @@ function renderTrendChart(timeseries = []) {
 
 function renderPartnerChart(partners = []) {
   const ctx = document.getElementById('partnerChart');
-  const labels = partners.map(p => p.partner_country);
-  const values = partners.map(p => p.value_usd);
+  const available = partners.filter(p => finiteNumber(p.value_usd) !== null);
+  const shares = available.map(p => finiteNumber(p.share));
+  const useShares = available.length > 0 && shares.every(value => value !== null);
+  const labels = available.map(p => p.partner_country);
+  const values = useShares
+    ? shares.map(value => value * 100)
+    : available.map(p => finiteNumber(p.value_usd));
+  if (useShares) {
+    const other = Math.max(0, 100 - values.reduce((sum, value) => sum + value, 0));
+    if (other > 0.01) {
+      labels.push('Other');
+      values.push(other);
+    }
+  }
   if (state.partnerChart) state.partnerChart.destroy();
   state.partnerChart = new Chart(ctx, {
     type: 'doughnut',
@@ -280,9 +455,22 @@ function renderPartnerChart(partners = []) {
 }
 
 function renderPartnerList(partners = []) {
-  document.getElementById('partnerList').innerHTML = partners.slice(0,5).map(p => 
-    `<li><span>${p.partner_country}</span> <span>${formatValue(p.value_usd, 'usd')}</span></li>`
+  const list = document.getElementById('partnerList');
+  if (!partners.length) {
+    list.innerHTML = '<li><span>Partner data unavailable</span></li>';
+    return;
+  }
+  list.innerHTML = partners.slice(0,5).map(p =>
+    `<li><span>${escapeHTML(p.partner_country || 'Unknown')}</span> <span>${formatValue(p.value_usd, 'usd')}</span></li>`
   ).join('');
+}
+
+function renderPartnerMeta(period, source) {
+  const element = document.getElementById('partnerMeta');
+  if (!element) return;
+  const details = [formatPeriod(period), formatSource(source)]
+    .filter(value => value !== 'Unavailable');
+  element.textContent = details.length ? details.join(' · ') : 'Partner data unavailable';
 }
 
 // Business Case
@@ -321,7 +509,7 @@ function downloadCsv() {
         item.hs_code,
         item.title,
         (item.sectors || []).join(';'),
-        item.last_12m_value_usd || 0,
+        item.last_12m_value_usd ?? '',
         item.opportunity_score ?? ''
       ]),
     ];
@@ -351,21 +539,27 @@ function handleCompareSubmit(e) {
   }
   // Simple comparison display
   Promise.all([
-    fetch(`/api/products/${hsA}`).then(r => r.json()),
-    fetch(`/api/products/${hsB}`).then(r => r.json())
+    fetch(`/api/products/${encodeURIComponent(hsA)}`).then(checkedJson),
+    fetch(`/api/products/${encodeURIComponent(hsB)}`).then(checkedJson)
   ]).then(([dA, dB]) => {
     document.getElementById('compareResults').innerHTML = [dA, dB].map(d => `
       <div class="card compact">
         <strong>${d.product.title}</strong>
-        <div class="meta">Score: ${d.product.opportunity_score.toFixed(2)}</div>
+        <div class="meta">Score: ${formatMetric(d.product.opportunity_score)}</div>
         <div class="meta">Imp: ${formatValue(d.product.last_12m_value_usd, 'usd')}</div>
         </div>
     `).join('');
+  }).catch((error) => {
+    console.error(error);
+    document.getElementById('compareResults').innerHTML = '<div class="results-state compact">Comparison unavailable.</div>';
+    showToast('Could not load comparison', 'error');
   });
 }
 
 function populateCompareOptions(items) {
-  const options = items.map(i => `<option value="${i.hs_code}">${i.title.substring(0,20)}...</option>`).join('');
+  const options = items.slice(0, MAX_COMPARE_OPTIONS).map(i =>
+    `<option value="${escapeHTML(i.hs_code)}">${escapeHTML((i.title || 'Untitled commodity').substring(0,40))}</option>`
+  ).join('');
   document.getElementById('compareA').innerHTML = `<option value="">Item A</option>${options}`;
   document.getElementById('compareB').innerHTML = `<option value="">Item B</option>${options}`;
 }
@@ -387,16 +581,24 @@ function renderWatchlistSidebar() {
 
 function renderAlerts(items) {
   const alerts = computeAlerts(items).slice(0, 8);
-  document.getElementById('alertsList').innerHTML = alerts.map(a => `
+  const list = document.getElementById('alertsList');
+  if (!alerts.length) {
+    list.innerHTML = '<li><span>No high-score signals available</span></li>';
+    return;
+  }
+  list.innerHTML = alerts.map(a => `
     <li onclick="openDrawer('${a.hs_code}')" style="cursor:pointer">
       <strong>${a.hs_code}</strong>
-      <span>Score: ${a.opportunity_score.toFixed(2)}</span>
+      <span>Score: ${formatMetric(a.opportunity_score)}</span>
     </li>
   `).join('');
 }
 
 function computeAlerts(items) {
-  return items.filter(item => (item.opportunity_score ?? 0) >= 0.7);
+  return items.filter(item => {
+    const score = finiteNumber(item.opportunity_score);
+    return score !== null && score >= 0.7;
+  });
 }
 
 function addToWatchlist(detail) {
@@ -413,10 +615,176 @@ function removeFromWatchlist(hs) {
 }
 
 // Helpers
-function formatValue(v, m) { if (v == null) return '—'; return m==='usd'?usdFormatter.format(v):numberFormatter.format(v); }
-function formatRange(min, max) { if(!min && !max) return '—'; return `${usdFormatter.format(min||0)}–${usdFormatter.format(max||0)}`; }
-function formatPercentage(v) { return v == null ? '—' : `${(Number(v)*100).toFixed(1)}%`; }
-function average(v) { const c = v.filter(x=>typeof x==='number'); return c.length ? c.reduce((a,b)=>a+b,0)/c.length : 0; }
+function finiteNumber(value) {
+  if (value == null || value === '') return null;
+  const number = Number(value);
+  return Number.isFinite(number) ? number : null;
+}
+function asNonNegativeInteger(value) {
+  const number = finiteNumber(value);
+  return number !== null && number >= 0 ? Math.floor(number) : null;
+}
+function formatValue(value, mode) {
+  const number = finiteNumber(value);
+  if (number === null) return 'Unavailable';
+  return mode === 'usd' ? usdFormatter.format(number) : numberFormatter.format(number);
+}
+function formatMetric(value, digits = 2) {
+  const number = finiteNumber(value);
+  return number === null ? 'Unavailable' : number.toFixed(digits);
+}
+function formatRange(min, max) {
+  const minimum = finiteNumber(min);
+  const maximum = finiteNumber(max);
+  if (minimum === null && maximum === null) return 'Unavailable';
+  if (minimum === null) return `Up to ${usdFormatter.format(maximum)}`;
+  if (maximum === null) return `From ${usdFormatter.format(minimum)}`;
+  return `${usdFormatter.format(minimum)}–${usdFormatter.format(maximum)}`;
+}
+function formatPercentage(value) {
+  const number = finiteNumber(value);
+  return number === null ? 'Unavailable' : `${(number * 100).toFixed(1)}%`;
+}
+function average(values) {
+  const available = values.map(finiteNumber).filter((value) => value !== null);
+  return available.length ? available.reduce((a, b) => a + b, 0) / available.length : null;
+}
+function checkedJson(response) {
+  if (!response.ok) throw new Error(`Request failed with status ${response.status}`);
+  return response.json();
+}
+function productComparator(sort) {
+  const valueFor = (item) => {
+    if (sort === 'value') return finiteNumber(item.last_12m_value_usd);
+    if (sort === 'progress') return finiteNumber(item.reduction_pct);
+    return finiteNumber(item.opportunity_score);
+  };
+  return (left, right) => {
+    const leftValue = valueFor(left);
+    const rightValue = valueFor(right);
+    if (leftValue !== rightValue) {
+      if (leftValue === null) return 1;
+      if (rightValue === null) return -1;
+      return rightValue - leftValue;
+    }
+    return String(left.hs_code || '').localeCompare(String(right.hs_code || ''));
+  };
+}
+function escapeHTML(value) {
+  return String(value ?? '')
+    .replaceAll('&', '&amp;')
+    .replaceAll('<', '&lt;')
+    .replaceAll('>', '&gt;')
+    .replaceAll('"', '&quot;')
+    .replaceAll("'", '&#39;');
+}
+function newestTimestamp(current, candidate) {
+  if (candidate == null || candidate === '') return current;
+  if (current == null || current === '') return candidate;
+  const currentTime = Date.parse(current);
+  const candidateTime = Date.parse(candidate);
+  if (!Number.isFinite(currentTime)) return candidate;
+  if (!Number.isFinite(candidateTime)) return current;
+  return candidateTime > currentTime ? candidate : current;
+}
+function metricCoverageTitle(label, available, total) {
+  if (!total) return `No ${label} data available`;
+  return `${numberFormatter.format(available)} of ${numberFormatter.format(total)} products have ${label} data`;
+}
+function setProductControlsLoading(isLoading) {
+  ['loadBtn', 'refreshBtn'].forEach((id) => {
+    const button = document.getElementById(id);
+    if (button) button.disabled = isLoading;
+  });
+  const dashboard = document.getElementById('view-dashboard');
+  if (dashboard) dashboard.setAttribute('aria-busy', String(isLoading));
+}
+function renderProductLoadingState() {
+  document.getElementById('resultsMeta').textContent = 'Loading all products…';
+  document.getElementById('cards').innerHTML = '<div class="results-state"><strong>Loading products</strong><span>Retrieving the complete catalogue in batches…</span></div>';
+  document.querySelector('#resultsTable tbody').innerHTML = '<tr class="state-row"><td colspan="6">Loading the complete product catalogue…</td></tr>';
+  ['statTotalProducts', 'statImportUsd', 'statAvgScore', 'statAlerts'].forEach((id) => {
+    document.getElementById(id).textContent = '—';
+  });
+  document.getElementById('alertsList').innerHTML = '<li><span>Loading signals…</span></li>';
+  populateCompareOptions([]);
+  document.getElementById('compareResults').innerHTML = '';
+  renderDataStatus('loading');
+}
+function renderProductErrorState(error) {
+  document.getElementById('resultsMeta').textContent = 'Data unavailable';
+  document.getElementById('cards').innerHTML = '<div class="results-state error"><strong>Products could not be loaded</strong><span>Refresh to try the complete catalogue again.</span></div>';
+  document.querySelector('#resultsTable tbody').innerHTML = '<tr class="state-row error"><td colspan="6">Products could not be loaded. Refresh to try again.</td></tr>';
+  ['statTotalProducts', 'statImportUsd', 'statAvgScore', 'statAlerts'].forEach((id) => {
+    document.getElementById(id).textContent = '—';
+  });
+  document.getElementById('alertsList').innerHTML = '<li><span>Signals unavailable</span></li>';
+  populateCompareOptions([]);
+  document.getElementById('compareResults').innerHTML = '';
+  renderDataStatus('error', error?.message);
+}
+function renderDataStatus(status = 'ready', errorMessage = '') {
+  const container = document.getElementById('dataStatus');
+  const population = document.getElementById('populationStatus');
+  const source = document.getElementById('sourceStatus');
+  const period = document.getElementById('periodStatus');
+  const freshness = document.getElementById('freshnessStatus');
+  if (!container || !population || !source || !period || !freshness) return;
+
+  container.dataset.state = status;
+  if (status === 'loading') {
+    population.textContent = 'Loading complete catalogue…';
+    population.title = '';
+    source.textContent = '—';
+    period.textContent = '—';
+    freshness.textContent = '—';
+    freshness.title = '';
+    return;
+  }
+  if (status === 'error') {
+    population.textContent = 'Product data unavailable';
+    population.title = errorMessage || '';
+    source.textContent = 'Unavailable';
+    period.textContent = 'Unavailable';
+    freshness.textContent = 'Unavailable';
+    freshness.title = '';
+    return;
+  }
+
+  population.textContent = `${numberFormatter.format(state.products.length)} of ${numberFormatter.format(state.total)} products loaded`;
+  population.title = '';
+  source.textContent = formatSource(state.source);
+  period.textContent = formatPeriod(state.latestPeriod);
+  freshness.textContent = formatTimestamp(state.lastUpdated);
+  freshness.title = state.lastUpdated || '';
+}
+function formatSource(value) {
+  if (value == null || value === '') return 'Unavailable';
+  const normalized = String(value).trim().toLowerCase().replace(/[\s_-]+/g, '');
+  if (normalized.startsWith('comtrade') || normalized === 'uncomtrade') return 'UN Comtrade';
+  if (normalized === 'dgcis') return 'DGCI&S';
+  if (normalized === 'database') return 'Database';
+  return String(value);
+}
+function formatPeriod(value) {
+  if (value == null || value === '') return 'Unavailable';
+  const text = String(value).trim();
+  const match = text.match(/^(\d{4})-?(\d{2})$/);
+  if (!match) return text;
+  const month = Number(match[2]);
+  if (month < 1 || month > 12) return text;
+  return new Intl.DateTimeFormat('en-IN', { month: 'short', year: 'numeric', timeZone: 'UTC' })
+    .format(new Date(Date.UTC(Number(match[1]), month - 1, 1)));
+}
+function formatTimestamp(value) {
+  if (value == null || value === '') return 'Unavailable';
+  const date = new Date(value);
+  if (!Number.isFinite(date.getTime())) return String(value);
+  return new Intl.DateTimeFormat('en-IN', {
+    dateStyle: 'medium',
+    timeStyle: 'short'
+  }).format(date);
+}
 function animateCounters() { /* ... Same as before ... */ }
 function persistJSON(k, v) { localStorage.setItem(k, JSON.stringify(v)); }
 function restoreJSON(k, d) { try { return JSON.parse(localStorage.getItem(k)) || d; } catch { return d; } }
