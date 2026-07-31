@@ -65,8 +65,21 @@ def test_screening_guardrails_are_visible() -> None:
     assert "Controlled goods stay out of default founder results" in INDEX
     assert "Aircraft and vessels carry a strategic-asset gate" in INDEX
     assert "excluded from ranking because project CAPEX coverage is not yet systematic" in INDEX
-    assert "CAPEX fit unverified" in APP
+    assert "Project CAPEX still unverified" in APP
     assert "not achievable market share, revenue, or expected return" in APP
+    assert "Record your thesis, not a fake stage" in APP
+    assert "data-action=\"set-stage\"" not in APP
+    assert "toggle-diligence" not in APP
+
+
+def test_client_loads_reviewed_routes_and_uses_full_mandate() -> None:
+    assert "'/api/opportunity-routes'" in APP
+    assert "capitalMultiplier: Number(form.get('capitalMultiplier'))" in APP
+    assert "strengths: form.getAll('strength')" in APP
+    assert "buyerAccess: form.get('buyerAccess')" in APP
+    assert "state.routes" in APP
+    assert "Modeled entry" in APP
+    assert "Startup complexity" in APP
 
 
 def test_csv_exports_neutralize_spreadsheet_formula_prefixes() -> None:

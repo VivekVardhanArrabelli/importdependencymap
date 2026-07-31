@@ -9,7 +9,7 @@
       content="Build for India turns live import demand into a ranked pipeline of domestic capability opportunities to build, back, or partner on."
     />
     <title>Build for India — Capital for Capability</title>
-    <link rel="stylesheet" href="/static/styles.css?v=20260731-1" />
+    <link rel="stylesheet" href="/static/styles.css?v=20260731-4" />
   </head>
   <body>
     <a class="skip-link" href="#main-content">Skip to opportunity map</a>
@@ -26,7 +26,7 @@
       <nav class="primary-nav" aria-label="Primary navigation">
         <button class="nav-item is-active" type="button" data-action="navigate" data-view="discover">Opportunity map</button>
         <button class="nav-item" type="button" data-action="navigate" data-view="portfolio">
-          Capital plan
+          Opportunity desk
           <span class="nav-count" id="savedCount">0</span>
         </button>
         <button class="nav-item" type="button" data-action="navigate" data-view="method">Method</button>
@@ -46,11 +46,12 @@
       <section class="app-view is-active" id="view-discover" data-view-panel="discover">
         <section class="hero-shell" aria-labelledby="hero-title">
           <div class="hero-copy">
-            <p class="eyebrow">India's import-exposure opportunity engine</p>
-            <h1 id="hero-title">Find where imported demand may justify Indian capability.</h1>
+            <p class="eyebrow">India's capability opportunity engine</p>
+            <h1 id="hero-title">Put capital behind what India still imports.</h1>
             <p class="hero-lede">
-              Turn observed import demand into a ranked pipeline of markets to investigate
-              as companies to build, operators to back, or strategic ventures to form.
+              Start with the cheque, time, access, and operating strengths you can actually
+              bring. See executable entry wedges separately from nationally important markets
+              that need a larger coalition.
             </p>
 
             <div class="proof-strip" aria-label="Live data coverage">
@@ -71,8 +72,8 @@
             <div class="hero-principle">
               <span class="principle-number">01</span>
               <p>
-                This is an evidence-backed screen, not a feed of startup ideas.
-                Execution economics still require diligence.
+                Not startup ideas. Each result is a market signal, a specific route in,
+                and an explicit list of evidence still needed before capital moves.
               </p>
             </div>
           </div>
@@ -80,63 +81,101 @@
           <form class="mandate-card" id="mandateForm">
             <div class="mandate-heading">
               <div>
-                <p class="section-kicker">Build your mandate</p>
-                <h2>What can you move?</h2>
+                <p class="section-kicker">Define your mandate</p>
+                <h2>What can you credibly move?</h2>
               </div>
-              <span class="model-badge">Local model</span>
+              <span class="model-badge">Private to this device</span>
             </div>
 
             <fieldset class="field-block">
-              <legend>I want to</legend>
+              <legend>How I want to participate</legend>
               <div class="segmented-control segmented-control--three">
                 <label>
                   <input type="radio" name="role" value="build" checked />
-                  <span>Build</span>
+                  <span>Build a company</span>
                 </label>
                 <label>
                   <input type="radio" name="role" value="back" />
-                  <span>Back</span>
+                  <span>Back an operator</span>
                 </label>
                 <label>
                   <input type="radio" name="role" value="partner" />
-                  <span>Partner</span>
+                  <span>Form a venture</span>
                 </label>
               </div>
             </fieldset>
 
             <fieldset class="field-block">
-              <legend>Capital available</legend>
+              <legend>Cheque I can commit</legend>
               <div class="capital-presets">
-                <label><input type="radio" name="capital" value="2500000" /><span>₹25L</span></label>
+                <label><input type="radio" name="capital" value="2500000" checked /><span>₹25L</span></label>
                 <label><input type="radio" name="capital" value="10000000" /><span>₹1Cr</span></label>
-                <label><input type="radio" name="capital" value="50000000" checked /><span>₹5Cr</span></label>
+                <label><input type="radio" name="capital" value="50000000" /><span>₹5Cr</span></label>
                 <label><input type="radio" name="capital" value="250000000" /><span>₹25Cr</span></label>
                 <label><input type="radio" name="capital" value="1000000000" /><span>₹100Cr+</span></label>
               </div>
-              <p class="field-note">Shapes the diligence route only. It is excluded from ranking because project CAPEX coverage is not yet systematic.</p>
+              <p class="field-note">Your cheque is not assumed to fund the whole project.</p>
             </fieldset>
 
             <div class="field-pair">
               <label class="select-field">
-                <span>Time to first operating milestone</span>
-                <select name="horizon" id="horizonSelect">
-                  <option value="12">Within 12 months</option>
-                  <option value="24" selected>About 24 months</option>
-                  <option value="36">36+ months</option>
+                <span>Capital stack I can assemble</span>
+                <select name="capitalMultiplier" id="capitalStackSelect">
+                  <option value="1" selected>My cheque only · 1×</option>
+                  <option value="3">Debt or co-investors · up to 3×</option>
+                  <option value="10">Institutional stack · up to 10×</option>
                 </select>
               </label>
               <label class="select-field">
-                <span>Execution ambition</span>
-                <select name="risk" id="riskSelect">
-                  <option value="resilient">Focused wedge</option>
-                  <option value="balanced" selected>Scaled build</option>
-                  <option value="frontier">Frontier capability</option>
+                <span>Time to first paid pilot</span>
+                <select name="horizon" id="horizonSelect">
+                  <option value="6">Within 6 months</option>
+                  <option value="12" selected>Within 12 months</option>
+                  <option value="24">Within 24 months</option>
+                  <option value="36">Within 36 months</option>
+                </select>
+              </label>
+            </div>
+
+            <div class="field-pair">
+              <label class="select-field">
+                <span>How I want to enter</span>
+                <select name="entryModel" id="entryModelSelect">
+                  <option value="make">Manufacture the core product</option>
+                  <option value="assemble" selected>Assemble or integrate</option>
+                  <option value="contract">Contract make or private-label</option>
+                  <option value="enable">Enable suppliers with services</option>
+                </select>
+              </label>
+              <label class="select-field">
+                <span>Buyers I can reach now</span>
+                <select name="buyerAccess" id="buyerSelect">
+                  <option value="none" selected>No warm buyer access yet</option>
+                  <option value="factories">Factories and industrial buyers</option>
+                  <option value="oems">OEMs and tier suppliers</option>
+                  <option value="government">Government and public-sector buyers</option>
+                  <option value="consumer">Consumer and retail channels</option>
+                  <option value="export">Export buyers and distributors</option>
                 </select>
               </label>
             </div>
 
             <fieldset class="field-block">
-              <legend>Where I have an edge <small>optional</small></legend>
+              <legend>Strengths I can deploy <small>select all that are real today</small></legend>
+              <div class="strength-grid">
+                <label><input type="checkbox" name="strength" value="buyer_access" /><span>Buyer access</span></label>
+                <label><input type="checkbox" name="strength" value="engineering" /><span>Engineering</span></label>
+                <label><input type="checkbox" name="strength" value="operations" /><span>Plant operations</span></label>
+                <label><input type="checkbox" name="strength" value="distribution" /><span>Distribution</span></label>
+                <label><input type="checkbox" name="strength" value="sourcing" /><span>Sourcing</span></label>
+                <label><input type="checkbox" name="strength" value="quality" /><span>Quality systems</span></label>
+                <label><input type="checkbox" name="strength" value="workshop" /><span>Workshop or factory</span></label>
+                <label><input type="checkbox" name="strength" value="land_power" /><span>Land and power</span></label>
+              </div>
+            </fieldset>
+
+            <fieldset class="field-block">
+              <legend>Sectors I understand <small>optional</small></legend>
               <div class="edge-grid" id="edgeGrid">
                 <label><input type="checkbox" name="sector" value="agrifood" /><span>Agrifood</span></label>
                 <label><input type="checkbox" name="sector" value="chemicals" /><span>Chemicals</span></label>
@@ -152,20 +191,16 @@
               </div>
             </fieldset>
 
-            <label class="range-field" for="countryWeight">
-              <span>
-                <b>Your edge</b>
-                <output id="countryWeightOutput">40 / 60</output>
-                <b>Country signal</b>
-              </span>
-              <input id="countryWeight" name="countryWeight" type="range" min="0" max="100" value="60" step="5" />
-            </label>
+            <div class="profile-completeness">
+              <span id="profileCompletenessStatus">4/7 mandate signals · 57% specified</span>
+              <p><strong>National importance</strong> measures the import signal. <strong>Personal feasibility</strong> tests the route against this mandate.</p>
+            </div>
 
             <button class="primary-button primary-button--wide" type="submit">
-              Generate my opportunity map
+              Find opportunities I can test
               <svg aria-hidden="true" viewBox="0 0 24 24"><path d="m5 12 14 0m-5-5 5 5-5 5" /></svg>
             </button>
-            <p class="legal-line">Capital-planning intelligence. Not investment advice or an offer to invest.</p>
+            <p class="legal-line">Decision-support intelligence. Not investment advice or an offer to invest.</p>
           </form>
         </section>
 
@@ -177,7 +212,7 @@
           <dl>
             <div><dt>Source</dt><dd id="sourceStatus">—</dd></div>
             <div><dt>Through</dt><dd id="periodStatus">—</dd></div>
-            <div><dt>Model</dt><dd>Demand + mandate</dd></div>
+            <div><dt>Model</dt><dd>Importance + feasibility</dd></div>
           </dl>
           <button class="text-button" id="refreshBtn" type="button">Refresh data</button>
         </section>
@@ -186,8 +221,8 @@
           <header class="section-header">
             <div>
               <p class="section-kicker">Opportunity map</p>
-              <h2 id="map-title">Your ranked field of action</h2>
-              <p class="section-description" id="mandateSummary">Build · ₹5Cr · 24-month milestone · Scaled build</p>
+              <h2 id="map-title">Markets worth your next serious look</h2>
+              <p class="section-description" id="mandateSummary">Build · ₹25L cheque · ₹25L launch envelope · paid pilot within 12 months · Assemble</p>
             </div>
             <div class="section-actions">
               <button class="secondary-button" id="downloadCsvBtn" type="button">
@@ -199,20 +234,20 @@
           <div class="lens-bar">
             <div class="lens-tabs" role="group" aria-label="Rank opportunities by">
               <button class="lens-tab is-active" type="button" aria-pressed="true" data-action="set-lens" data-lens="fit">
-                Best combined fit
+                Best for me
               </button>
               <button class="lens-tab" type="button" aria-pressed="false" data-action="set-lens" data-lens="national">
-                Import exposure
+                National importance
               </button>
               <button class="lens-tab" type="button" aria-pressed="false" data-action="set-lens" data-lens="rising">
-                Scale-adjusted momentum
+                Fastest to test
               </button>
               <button class="lens-tab" type="button" aria-pressed="false" data-action="set-lens" data-lens="wedge">
-                Practical wedges
+                Surprising wedges
               </button>
             </div>
             <p class="lens-explainer" id="lensExplainer">
-              Balances the country import signal with your selected mandate.
+              Leads with personal feasibility, then uses national importance to order credible routes.
             </p>
           </div>
 
@@ -240,7 +275,7 @@
               </select>
             </label>
             <label class="capture-control">
-              <span>Scenario</span>
+              <span>Import pool scenario</span>
               <select id="captureSelect" aria-label="Import substitution scenario">
                 <option value="0.1">0.1% substitution</option>
                 <option value="0.5">0.5% substitution</option>
@@ -275,11 +310,12 @@
         <section class="workspace-shell">
           <header class="workspace-header">
             <div>
-              <p class="eyebrow">Capital plan</p>
-              <h1>Turn a shortlist into a decision pipeline.</h1>
+              <p class="eyebrow">Opportunity desk</p>
+              <h1>Compare the case before you commit.</h1>
               <p>
-                Allocate hypothetical capital, surface evidence gaps, and move each
-                opportunity from signal to diligence.
+                Put shortlisted markets side by side, record an indicative cheque, and
+                make the unresolved evidence impossible to miss. This is a decision workspace,
+                not a claim that a project has advanced.
               </p>
             </div>
             <div class="local-only-note">
@@ -290,20 +326,20 @@
 
           <div class="portfolio-stats">
             <article>
-              <span>Available mandate</span>
-              <strong id="portfolioAvailable">₹5Cr</strong>
+              <span>Cheque mandate</span>
+              <strong id="portfolioAvailable">₹25L</strong>
             </article>
             <article>
-              <span>Planned allocation</span>
+              <span>Indicative cheques</span>
               <strong id="portfolioAllocated">₹0</strong>
-              <small id="portfolioAllocationStatus">Nothing allocated yet</small>
+              <small id="portfolioAllocationStatus">No capital earmarked</small>
             </article>
             <article>
-              <span>Opportunities</span>
+              <span>Markets compared</span>
               <strong id="portfolioCount">0</strong>
             </article>
             <article>
-              <span>Import exposure represented</span>
+              <span>Import pools compared</span>
               <strong id="portfolioExposure">—</strong>
               <small>Gross annual pool, not projected revenue</small>
             </article>
@@ -311,10 +347,10 @@
 
           <div class="portfolio-toolbar">
             <div>
-              <h2>Decision pipeline</h2>
-              <p id="portfolioEvidenceSummary">Add opportunities to begin a diligence plan.</p>
+              <h2>Shortlist comparison</h2>
+              <p id="portfolioEvidenceSummary">Add opportunities to compare their evidence and unresolved risks.</p>
             </div>
-            <button class="secondary-button" id="exportPlanBtn" type="button">Export capital plan</button>
+            <button class="secondary-button" id="exportPlanBtn" type="button">Export comparison</button>
           </div>
 
           <div class="portfolio-list" id="portfolioList"></div>
@@ -324,10 +360,11 @@
       <section class="app-view" id="view-method" data-view-panel="method" hidden>
         <section class="method-shell">
           <header class="method-hero">
-            <p class="eyebrow">Method, not mystery</p>
-            <h1>Know what the system observed, derived, and still does not know.</h1>
+            <p class="eyebrow">Two axes, not one magic score</p>
+            <h1>Separate what matters to India from what you can execute.</h1>
             <p>
-              The ranking is a transparent import-exposure screen. Gross imports do not
+              Every market is read on two independent axes: national importance from trade
+              evidence, and personal feasibility from the mandate you declare. Gross imports do not
               by themselves prove dependence, a domestic capability gap, factory feasibility,
               or an attractive investment.
             </p>
@@ -337,7 +374,7 @@
             <article class="method-card method-card--observed">
               <span class="method-index">A</span>
               <p class="section-kicker">Observed facts</p>
-              <h2>Trade demand</h2>
+              <h2>Trade evidence</h2>
               <p>Annual import value, baseline change, monthly history, partner mix, and data period come from trade records.</p>
               <ul>
                 <li><strong id="methodDemandCoverage">—</strong> markets with 12-month demand</li>
@@ -348,11 +385,11 @@
 
             <article class="method-card method-card--derived">
               <span class="method-index">B</span>
-              <p class="section-kicker">Derived signals</p>
-              <h2>Country import signal</h2>
+              <p class="section-kicker">Axis one</p>
+              <h2>National importance</h2>
               <p>
-                70% import-value percentile + 30% import-value momentum. Your combined
-                view weights that country signal against a mandate match.
+                Import-value scale and momentum identify large or accelerating pools where
+                domestic capability could matter. This axis does not claim that you should enter.
               </p>
               <ul>
                 <li>Missing facts are omitted, never converted to zero</li>
@@ -366,17 +403,19 @@
 
             <article class="method-card method-card--assumption">
               <span class="method-index">C</span>
-              <p class="section-kicker">Planning assumptions</p>
-              <h2>Execution route</h2>
+              <p class="section-kicker">Axis two</p>
+              <h2>Personal feasibility</h2>
               <p>
-                Role, first-milestone timing, execution ambition, and sector edge shape a screening match. Capital
-                suggests a diligence route but does not prove project fit.
+                Role, cheque, capital-stack access, time to a paid pilot, entry model,
+                strengths, buyer access, and sector familiarity shape the route you could test.
               </p>
               <ul>
+                <li><strong id="methodRouteCoverage">—</strong> reviewed business-entry routes</li>
                 <li><strong id="methodCapexCoverage">—</strong> catalogue markets with any unsourced CAPEX estimate</li>
-                <li>Capital changes the route, not the match score; isolated sourced records appear only as evidence</li>
+                <li>Cheque × capital stack creates modeled launch envelopes, not project quotations</li>
+                <li>Unsourced project CAPEX is excluded from ranking because project CAPEX coverage is not yet systematic</li>
                 <li>Technical feasibility and unit economics are not yet verified</li>
-                <li>Scenario value is gross import exposure, not revenue</li>
+                <li>No self-reported progress score or readiness badge is created</li>
               </ul>
             </article>
           </div>
@@ -384,12 +423,13 @@
           <section class="formula-panel" aria-labelledby="formula-title">
             <div>
               <p class="section-kicker">Transparent ranking</p>
-              <h2 id="formula-title">Two signals. One adjustable priority.</h2>
+              <h2 id="formula-title">Two answers. Clear uncertainty.</h2>
             </div>
             <div class="formula">
-              <div><span>Country import signal</span><strong>70% import-value scale + 30% import-value momentum</strong></div>
-              <div><span>Mandate match</span><strong>Sector edge + milestone/ambition alignment + role</strong></div>
-              <div><span>Combined fit</span><strong>Your country ↔ personal weighting</strong></div>
+              <div><span>National importance</span><strong>Observed import pool + scale-adjusted momentum + explicit strategic gates</strong></div>
+              <div><span>Personal feasibility</span><strong>Entry route + buyer access + operating strengths + time to a paid pilot</strong></div>
+              <div><span>Launch envelope</span><strong>Your cheque × stated capital-stack reach, clearly labeled as modeled</strong></div>
+              <div><span>Decision record</span><strong>Shortlist, compare, annotate, and reject—without pretending activity equals progress</strong></div>
             </div>
           </section>
 
@@ -409,7 +449,7 @@
                 <strong>DGCI&amp;S TradeStat</strong>
                 <small>Official India data with deeper HS8 detail; use official exports, not brittle scraping.</small>
               </a>
-              <a href="https://trade-analytics.commerce.gov.in/public/indiaTrade" target="_blank" rel="noreferrer">
+              <a href="https://trade-analytics.commerce.gov.in/public/commodity" target="_blank" rel="noreferrer">
                 <span>Official enrichment</span>
                 <strong>Trade Intelligence &amp; Analytics</strong>
                 <small>Useful validation and India-specific trade context.</small>
@@ -418,6 +458,26 @@
                 <span>Domestic capability baseline</span>
                 <strong>MoSPI Annual Survey of Industries</strong>
                 <small>Factory output, inputs, fixed assets, and employment; requires a careful NIC-to-HS concordance.</small>
+              </a>
+              <a href="https://microdata.gov.in/NADA/index.php/catalog/299/study-description" target="_blank" rel="noreferrer">
+                <span>Production reality check</span>
+                <strong>MoSPI Index of Industrial Production</strong>
+                <small>Monthly output for 1,042 industrial items; useful after a careful product concordance.</small>
+              </a>
+              <a href="https://www.data.gov.in/resource/district-wise-total-msme-registered-enterprises-under-udyam-registration-till-last-date" target="_blank" rel="noreferrer">
+                <span>Cluster signal</span>
+                <strong>Udyam MSME open data</strong>
+                <small>District-level enterprise density for supplier and location screening.</small>
+              </a>
+              <a href="https://www.bis.gov.in/products-under-compulsory-certification/?lang=en" target="_blank" rel="noreferrer">
+                <span>Compliance gate</span>
+                <strong>BIS compulsory certification</strong>
+                <small>Current product-specific QCO and certification obligations must be checked before launch.</small>
+              </a>
+              <a href="https://www.nsws.gov.in/" target="_blank" rel="noreferrer">
+                <span>Approval discovery</span>
+                <strong>National Single Window System</strong>
+                <small>Use the official portal to identify central and state approvals for the actual project.</small>
               </a>
             </div>
           </section>
@@ -440,10 +500,10 @@
         <div class="dossier-command__label">
           <span id="dossierTitle">Opportunity dossier</span>
           <small id="dossierCode">HS —</small>
-          <p class="sr-only" id="dossierDescription">Evidence, scenarios, and diligence actions for the selected opportunity.</p>
+          <p class="sr-only" id="dossierDescription">Evidence, launch route, unresolved gaps, and decision notes for the selected opportunity.</p>
         </div>
         <div class="dossier-command__actions">
-          <button class="secondary-button secondary-button--compact" id="dossierSaveBtn" type="button">Add to capital plan</button>
+          <button class="secondary-button secondary-button--compact" id="dossierSaveBtn" type="button">Add to opportunity desk</button>
           <button class="icon-button icon-button--light" id="closeDossierBtn" type="button" aria-label="Close opportunity dossier">
             <svg aria-hidden="true" viewBox="0 0 24 24"><path d="m6 6 12 12M18 6 6 18" /></svg>
           </button>
@@ -459,7 +519,7 @@
 
     <div class="toast" id="toast" role="status" aria-live="polite" hidden></div>
 
-    <script src="/static/opportunity-model.js?v=20260731-1"></script>
-    <script src="/static/app.js?v=20260731-1"></script>
+    <script src="/static/opportunity-model.js?v=20260731-2"></script>
+    <script src="/static/app.js?v=20260731-2"></script>
   </body>
 </html>

@@ -3,8 +3,9 @@
 Build for India is a capital-allocation operating system for domestic
 capability. It maps India's imports by HS6 commodity, turns observed demand
 into transparent opportunity signals, and helps a founder, operator, or
-capital partner move candidates from screening to diligence to a hypothetical
-capital plan. The app is a FastAPI service backed by Postgres with a
+capital partner compare specific business-entry routes against their cheque,
+capital-stack reach, time window, operating strengths, buyer access, and sector
+knowledge. The app is a FastAPI service backed by Postgres with a
 dependency-light static browser client.
 
 The browser experience separates three kinds of information:
@@ -13,12 +14,18 @@ The browser experience separates three kinds of information:
   mix, source, and period.
 - **Derived signals:** country import signal and mandate match, with the formula shown
   in the product.
-- **Planning assumptions:** entry route and import-substitution scenarios.
+- **Modeled routes:** a versioned, reviewed business name, narrow entry wedge,
+  launch envelope, first paid proof, buyer, complexity profile, and explicit
+  unknowns. Unmapped customs categories remain research-only.
+- **Planning assumptions:** import-substitution scenarios and indicative cheque
+  allocations.
 
 It does not execute investments, estimate returns, or treat import exposure as
-revenue. Capital shapes the suggested diligence route but is excluded from fit
-scoring because project-CAPEX coverage is not yet systematic. Isolated sourced
-records appear as evidence, not as a ranking input.
+revenue. Capital affects personal feasibility only through the route registry's
+explicitly modeled validation/entry envelope; those envelopes are never
+presented as verified plant CAPEX. The UI intentionally has no stage tracker or
+self-reported progress score: opening a dossier and ticking a box are not proof
+that a business has advanced.
 
 ## What populates the app
 
@@ -37,6 +44,9 @@ trade facts:
   separate so partner concentration cannot double-count World plus countries.
 - Product-detail partner data is fetched from Comtrade for the latest loaded
   month when no partner breakdown is stored locally.
+- `data/opportunity_routes.v1.json` translates a bounded set of HS6 signals into
+  reviewed business-entry routes. The API validates every field and caps each
+  HS code at two routes; generic catalogue rows are explicitly research-only.
 
 The ETL reads current Comtrade v1 fields such as `cmdDesc`, `primaryValue`,
 `netWgt`, `qty`, and `partnerISO`, while retaining compatibility with older
@@ -162,6 +172,7 @@ Public routes:
 - `GET /api/products/{hs_code}`
 - `GET /api/leaderboard`
 - `GET /api/domestic_capability/{hs_code}`
+- `GET /api/opportunity-routes`
 - `POST /api/domestic_capability`
 
 Protected routes:
@@ -198,13 +209,22 @@ live partner snapshot is shown on product detail. Missing values are never
 rendered as zero.
 
 The browser does not substitute a made-up value for that unavailable backend
-score. It presents two separate screening signals:
+score. It presents two separate axes, then ranks reviewed routes by the selected
+lens:
 
 ```text
 CountryImportSignal = 70% import-value percentile + 30% import-value momentum
-MandateMatch = sector edge + milestone/ambition alignment + selected role
-CombinedFit = user-selected weighting of CountryImportSignal and MandateMatch
+PersonalFeasibility = 25% capital + 20% time + 15% entry model
+                    + 15% strengths + 10% buyer access
+                    + 10% sector knowledge + 5% role
+BestForMe = 65% PersonalFeasibility + 35% CountryImportSignal
 ```
+
+Fit is tiered before numerical sorting: reviewed and actionable hypotheses come
+before stretches, larger-stack/partner routes, research-only customs signals,
+and blocked strategic or controlled categories. National importance remains
+persona-invariant. Changing the mandate can change both the selected route
+inside an HS code and the cross-market ordering.
 
 Sector groups are derived from official HS chapters rather than loose
 substring matching. This prevents false classifications such as `coiled` or
@@ -216,6 +236,20 @@ aircraft and vessels carry a strategic-asset gate.
 Gross import value is an exposure screen, not proof of dependence or a domestic
 capability gap. Production, export, price/quantity, buyer, and project evidence
 must be added during diligence before capital is committed.
+
+### Next official enrichments
+
+Do not scrape dashboards into production. Prefer stable official exports or
+approved feeds, preserve source dates, and maintain explicit concordances:
+
+- DGCI&S HS8 imports as the India-primary trade layer (the existing
+  `POST /admin/etl/dgcis` adapter accepts normalized official exports).
+- MoSPI IIP for monthly domestic production, and disclosure-safe ASI aggregates
+  for factory capital, inputs, labor, and output.
+- Udyam open data for district supplier/cluster density.
+- DGFT ITC(HS) and BIS QCO/product-certification lists as hard legality and
+  compliance gates.
+- GeM/CPPP demand and award records only through approved exports or feeds.
 
 ## Railway deployment
 
