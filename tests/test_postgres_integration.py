@@ -68,6 +68,17 @@ class PostgresIntegrationTest(unittest.TestCase):
                     );
                     CREATE UNIQUE INDEX uq_monthly_imports_hs_ym_partner
                       ON monthly_imports (hs_code, year, month, partner_country);
+                    CREATE TABLE domestic_capability (
+                        id SERIAL PRIMARY KEY,
+                        hs_code TEXT REFERENCES products(hs_code),
+                        capex_min NUMERIC,
+                        capex_max NUMERIC,
+                        machines JSONB,
+                        skills JSONB,
+                        notes TEXT,
+                        source TEXT,
+                        verified BOOLEAN DEFAULT false
+                    );
                     INSERT INTO products (hs_code, title, description, sectors)
                     VALUES ('850760', 'Lithium-ion accumulators', 'Legacy row',
                             ARRAY['industrial']);
@@ -77,6 +88,12 @@ class PostgresIntegrationTest(unittest.TestCase):
                     VALUES
                         ('850760', 2024, 1, 10, NULL),
                         ('850760', 2024, 1, 20, NULL);
+                    INSERT INTO domestic_capability (
+                        hs_code, capex_min, capex_max, notes, source
+                    )
+                    VALUES
+                        ('850760', 100, 200, 'Older duplicate', 'legacy'),
+                        ('850760', 300, 400, 'Newest duplicate', 'legacy');
                     """
                 )
 
@@ -97,6 +114,52 @@ class PostgresIntegrationTest(unittest.TestCase):
                 self.assertEqual(count, 1)
                 self.assertEqual(partner, "UNKNOWN")
                 self.assertEqual(source, "legacy")
+
+                cur.execute(
+                    """
+                    SELECT id, notes
+                    FROM domestic_capability
+                    WHERE hs_code = '850760'
+                    """
+                )
+                migrated_capability = cur.fetchall()
+                self.assertEqual(len(migrated_capability), 1)
+                self.assertEqual(migrated_capability[0][1], "Newest duplicate")
+
+            first_id = db.upsert_domestic_capability(
+                conn,
+                hs_code="850760",
+                capex_min=500,
+                capex_max=900,
+                machines=["pack tester"],
+                skills=["quality"],
+                notes="First migrated upsert",
+                source="integration-test",
+            )
+            second_id = db.upsert_domestic_capability(
+                conn,
+                hs_code="850760",
+                capex_min=600,
+                capex_max=1000,
+                machines=["pack tester", "cycler"],
+                skills=["quality", "engineering"],
+                notes="Latest migrated upsert",
+                source="integration-test",
+            )
+            self.assertEqual(second_id, first_id)
+            with conn.cursor() as cur:
+                cur.execute(
+                    """
+                    SELECT COUNT(*), MIN(notes), MIN(capex_min), MIN(capex_max)
+                    FROM domestic_capability
+                    WHERE hs_code = '850760'
+                    """
+                )
+                capability_count, notes, capex_min, capex_max = cur.fetchone()
+                self.assertEqual(capability_count, 1)
+                self.assertEqual(notes, "Latest migrated upsert")
+                self.assertEqual(float(capex_min), 600.0)
+                self.assertEqual(float(capex_max), 1000.0)
 
             db.bulk_upsert_products(
                 conn,

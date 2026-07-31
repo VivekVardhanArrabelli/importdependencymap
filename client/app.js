@@ -8,11 +8,10 @@ const MAX_PRODUCT_PAGES = 1000;
 const RESULT_INCREMENT = 18;
 const EVIDENCE_CACHE_MAX_AGE_MS = 24 * 60 * 60 * 1000;
 const STORAGE_KEYS = {
-  profile: 'bfi_mandate_v2',
+  profile: 'bfi_mandate_v3',
   shortlist: 'bfi_capital_plan_v2',
   allocations: 'bfi_allocations_v2',
-  decisions: 'bfi_decisions_v2',
-  diligence: 'bfi_diligence_v2',
+  notes: 'bfi_opportunity_notes_v3',
   evidence: 'bfi_evidence_v3',
   theme: 'bfi_theme'
 };
@@ -23,51 +22,28 @@ const ROLE_LABELS = {
   partner: 'Form a strategic venture'
 };
 
-const RISK_LABELS = {
-  resilient: 'Focused wedge',
-  balanced: 'Scaled build',
-  frontier: 'Frontier capability'
+const ENTRY_MODEL_LABELS = {
+  make: 'Manufacture',
+  assemble: 'Assemble or integrate',
+  contract: 'Contract make',
+  enable: 'Enable suppliers'
+};
+
+const BUYER_LABELS = {
+  none: 'No warm buyer access',
+  factories: 'Factory buyers',
+  oems: 'OEM buyers',
+  government: 'Government buyers',
+  consumer: 'Consumer channels',
+  export: 'Export buyers'
 };
 
 const LENS_COPY = {
-  fit: 'Balances the country import signal with your selected mandate.',
+  fit: 'Leads with personal feasibility, then uses national importance to order credible routes.',
   national: 'Ranks import-value exposure and momentum; this does not prove a domestic capability gap.',
-  rising: 'Balances import-value momentum with market scale; records without a trend are shown last.',
-  wedge: 'Prioritizes execution alignment while keeping the country import signal in view.'
+  rising: 'Ranks routes by modeled time to a first paid proof; unresolved categories are shown last.',
+  wedge: 'Surfaces less-obvious, personally feasible routes with direct import-substitution potential.'
 };
-
-const DILIGENCE_TASKS = [
-  {
-    period: 'Days 1–15',
-    title: 'Verify buyer pain',
-    detail: 'Interview at least five buyers; document specifications, annual volume, switching barriers, and approved-vendor rules.'
-  },
-  {
-    period: 'Days 10–30',
-    title: 'Decompose the production system',
-    detail: 'Map the BOM, process steps, yields, imported inputs, utilities, tooling, and technical talent required.'
-  },
-  {
-    period: 'Days 20–45',
-    title: 'Price the real capability',
-    detail: 'Obtain equipment, contract-manufacturing, land, utility, working-capital, and commissioning quotes.'
-  },
-  {
-    period: 'Days 30–55',
-    title: 'Clear standards and compliance',
-    detail: 'Map BIS or sector certification, environmental approvals, testing, IP, and product-liability obligations.'
-  },
-  {
-    period: 'Days 45–75',
-    title: 'Build unit economics',
-    detail: 'Test price, yield, scrap, energy, logistics, duties, financing cost, and working-capital sensitivity.'
-  },
-  {
-    period: 'Days 60–90',
-    title: 'Secure a reason to exist',
-    detail: 'Validate an anchor customer, offtake, technical partner, location advantage, or supplier-cluster strategy.'
-  }
-];
 
 const usdCompactFormatter = new Intl.NumberFormat('en-US', {
   style: 'currency',
@@ -84,6 +60,8 @@ const numberFormatter = new Intl.NumberFormat('en-IN', { maximumFractionDigits: 
 
 const state = {
   products: [],
+  routes: [],
+  routeVersion: null,
   marketContext: null,
   ranked: [],
   filtered: [],
@@ -102,8 +80,7 @@ const state = {
   },
   shortlist: restoreShortlist(),
   allocations: sanitizeNumberMap(restoreJSON(STORAGE_KEYS.allocations, {})),
-  decisions: sanitizeDecisionMap(restoreJSON(STORAGE_KEYS.decisions, {})),
-  diligence: sanitizeChecklistMap(restoreJSON(STORAGE_KEYS.diligence, {})),
+  notes: sanitizeNoteMap(restoreJSON(STORAGE_KEYS.notes, {})),
   detailEvidence: sanitizeEvidenceMap(restoreJSON(STORAGE_KEYS.evidence, {})),
   selected: null,
   view: 'discover',
@@ -141,7 +118,6 @@ function wireEvents() {
 
   document.getElementById('mandateForm').addEventListener('submit', handleMandateSubmit);
   document.getElementById('mandateForm').addEventListener('change', handleMandateChange);
-  document.getElementById('countryWeight').addEventListener('input', handleCountryWeightInput);
   document.getElementById('searchInput').addEventListener('input', handleSearchInput);
   document.getElementById('sectorFilter').addEventListener('change', handleSectorFilter);
   document.getElementById('captureSelect').addEventListener('change', handleCaptureChange);
@@ -186,14 +162,8 @@ function handleDocumentClick(event) {
     removeFromPlan(actionTarget.dataset.hsCode);
     return;
   }
-  if (action === 'set-decision') {
-    const focusToken = interactionFocusToken(actionTarget);
-    setDecision(actionTarget.dataset.hsCode, actionTarget.dataset.status);
-    restoreInteractionFocus(focusToken);
-    return;
-  }
   if (action === 'save-notes') {
-    saveDecisionNotes(actionTarget.dataset.hsCode);
+    saveOpportunityNotes(actionTarget.dataset.hsCode);
     return;
   }
   if (action === 'retry-load') {
@@ -201,20 +171,7 @@ function handleDocumentClick(event) {
   }
 }
 
-function handleDocumentChange(event) {
-  const target = event.target;
-  if (target.matches('[data-action="set-stage"]')) {
-    const focusToken = interactionFocusToken(target);
-    setDecision(target.dataset.hsCode, target.value, { rerenderDossier: false });
-    renderPortfolioStats();
-    restoreInteractionFocus(focusToken);
-  }
-  if (target.matches('[data-action="toggle-diligence"]')) {
-    const task = target.closest('.diligence-task');
-    if (task) task.classList.toggle('is-complete', target.checked);
-    toggleDiligence(target.dataset.hsCode, Number(target.dataset.index), target.checked);
-  }
-}
+function handleDocumentChange() {}
 
 function handleDocumentInput(event) {
   const target = event.target;
@@ -276,13 +233,6 @@ function handleMandateChange() {
   if (state.view === 'portfolio') renderPortfolio();
 }
 
-function handleCountryWeightInput(event) {
-  const country = Number(event.currentTarget.value);
-  document.getElementById('countryWeightOutput').textContent = `${100 - country} / ${country}`;
-  readProfileFromForm();
-  renderDiscovery();
-}
-
 function handleSearchInput(event) {
   clearTimeout(state.searchTimer);
   const query = event.currentTarget.value.trim().toLowerCase();
@@ -317,11 +267,13 @@ function readProfileFromForm() {
   const form = new FormData(document.getElementById('mandateForm'));
   state.profile = Model.sanitizeProfile({
     capitalInr: Number(form.get('capital')),
+    capitalMultiplier: Number(form.get('capitalMultiplier')),
     role: form.get('role'),
     horizonMonths: Number(form.get('horizon')),
-    risk: form.get('risk'),
+    entryModel: form.get('entryModel'),
+    strengths: form.getAll('strength'),
+    buyerAccess: form.get('buyerAccess'),
     sectors: form.getAll('sector'),
-    countryWeight: Number(document.getElementById('countryWeight').value),
     capturePct: Number(document.getElementById('captureSelect').value)
   });
   persistProfile();
@@ -338,14 +290,16 @@ function syncProfileControls() {
   const capital = document.querySelector(`input[name="capital"][value="${cssEscape(String(profile.capitalInr))}"]`);
   if (role) role.checked = true;
   if (capital) capital.checked = true;
+  document.getElementById('capitalStackSelect').value = String(profile.capitalMultiplier);
   document.getElementById('horizonSelect').value = String(profile.horizonMonths);
-  document.getElementById('riskSelect').value = profile.risk;
+  document.getElementById('entryModelSelect').value = profile.entryModel;
+  document.getElementById('buyerSelect').value = profile.buyerAccess;
+  document.querySelectorAll('input[name="strength"]').forEach((input) => {
+    input.checked = profile.strengths.includes(input.value);
+  });
   document.querySelectorAll('input[name="sector"]').forEach((input) => {
     input.checked = profile.sectors.includes(input.value);
   });
-  document.getElementById('countryWeight').value = String(profile.countryWeight);
-  document.getElementById('countryWeightOutput').textContent =
-    `${100 - profile.countryWeight} / ${profile.countryWeight}`;
   syncCaptureControl(profile.capturePct);
 }
 
@@ -405,12 +359,18 @@ async function loadProducts(force = false) {
   renderLoadingState();
 
   try {
-    const data = await fetchCompleteCatalogue({
+    const requestOptions = {
       signal: state.catalogueController.signal,
       cache: force ? 'no-store' : 'default'
-    });
+    };
+    const [data, routeRegistry] = await Promise.all([
+      fetchCompleteCatalogue(requestOptions),
+      fetchOpportunityRoutes(requestOptions)
+    ]);
     if (requestId !== state.loadRequestId) return;
     state.products = data.items;
+    state.routes = Model.normalizeRoutes(routeRegistry.routes);
+    state.routeVersion = routeRegistry.version || null;
     state.marketContext = Model.createMarketContext(state.products);
     state.metadata = {
       total: data.total,
@@ -424,7 +384,7 @@ async function loadProducts(force = false) {
     renderDiscovery();
     renderMethodCoverage();
     renderPortfolio();
-    showToast(`${numberFormatter.format(state.products.length)} live markets ready`);
+    showToast(`${numberFormatter.format(state.products.length)} markets and ${numberFormatter.format(state.routes.length)} reviewed routes ready`);
   } catch (error) {
     if (error.name === 'AbortError' || requestId !== state.loadRequestId) return;
     console.error(error);
@@ -435,6 +395,20 @@ async function loadProducts(force = false) {
     showToast('The live opportunity universe could not be loaded', 'error');
   } finally {
     if (requestId === state.loadRequestId) state.catalogueController = null;
+  }
+}
+
+async function fetchOpportunityRoutes(options) {
+  try {
+    const response = await fetch('/api/opportunity-routes', options);
+    if (!response.ok) throw new Error(`Route request failed with status ${response.status}`);
+    const data = await response.json();
+    if (!data || !Array.isArray(data.routes)) throw new Error('Route API returned an invalid response');
+    return data;
+  } catch (error) {
+    if (error.name === 'AbortError') throw error;
+    console.warn('Reviewed opportunity routes are unavailable; showing trade signals as research only.', error);
+    return { version: null, routes: [] };
   }
 }
 
@@ -574,13 +548,19 @@ function renderMandateSummary() {
   const selectedEdges = state.profile.sectors.length
     ? state.profile.sectors.map(titleCase).join(', ')
     : 'All sectors';
+  const completeness = Model.profileCompleteness(state.profile);
+  const projectCapital = Model.projectCapital(state.profile);
   document.getElementById('mandateSummary').textContent = [
     ROLE_LABELS[state.profile.role],
-    formatInr(state.profile.capitalInr),
-    `${state.profile.horizonMonths}${state.profile.horizonMonths === 36 ? '+' : ''}-month milestone`,
-    RISK_LABELS[state.profile.risk],
+    `${formatInr(state.profile.capitalInr)} cheque`,
+    `${formatInr(projectCapital)} modeled stack`,
+    `paid proof within ${state.profile.horizonMonths}${state.profile.horizonMonths === 36 ? '+' : ''} months`,
+    ENTRY_MODEL_LABELS[state.profile.entryModel],
+    BUYER_LABELS[state.profile.buyerAccess],
     selectedEdges
   ].join(' · ');
+  const status = document.getElementById('profileCompletenessStatus');
+  if (status) status.textContent = `${completeness.answered}/${completeness.total} mandate signals · ${completeness.percentage}% specified`;
 }
 
 function renderOpportunityResults() {
@@ -589,7 +569,8 @@ function renderOpportunityResults() {
     state.products,
     state.profile,
     state.filters.lens,
-    state.marketContext
+    state.marketContext,
+    state.routes
   );
   const query = state.filters.query;
   const sector = state.filters.sector;
@@ -599,6 +580,9 @@ function renderOpportunityResults() {
       product.hs_code,
       product.title,
       product.description,
+      opportunity.shortTitle,
+      opportunity.route.wedge,
+      opportunity.route.buyer,
       ...opportunity.sectors
     ].join(' ').toLowerCase();
     if (query && !searchText.includes(query)) return false;
@@ -623,13 +607,13 @@ function renderOpportunityResults() {
   }
 
   const lensName = {
-    fit: 'combined fit',
-    national: 'country import signal',
-    rising: 'scale-adjusted import-value momentum',
-    wedge: 'practical wedge'
+    fit: 'personal feasibility tier, then fit',
+    national: 'national import signal',
+    rising: 'time to first paid proof',
+    wedge: 'surprising executable wedge'
   }[state.filters.lens];
   document.getElementById('resultsMeta').textContent =
-    `Showing ${numberFormatter.format(visible.length)} of ${numberFormatter.format(state.filtered.length)} markets ranked by ${lensName}`;
+    `Showing ${numberFormatter.format(visible.length)} of ${numberFormatter.format(state.filtered.length)} markets ranked by ${lensName} · ${numberFormatter.format(state.routes.length)} reviewed entry routes`;
   const loadMore = document.getElementById('loadMoreBtn');
   loadMore.hidden = visible.length >= state.filtered.length;
   if (!loadMore.hidden) {
@@ -646,10 +630,6 @@ function opportunityCard(opportunity, index) {
     ? '—'
     : String(Math.round(lensScore));
   const sector = opportunity.sectors[0] || 'unclassified';
-  const detailedEvidence = detailEvidenceFor(product.hs_code);
-  const evidenceReady = Object.values(opportunity.evidence).filter(Boolean).length
-    + Number(Boolean(detailedEvidence.supplier))
-    + Number(Boolean(detailedEvidence.capex));
   const trendClass = opportunity.reductionPct === null
     ? 'neutral'
     : opportunity.reductionPct < -0.001
@@ -668,80 +648,84 @@ function opportunityCard(opportunity, index) {
       <header class="opportunity-card__header">
         <div class="rank-mark">
           <span>#${String(index + 1).padStart(2, '0')}</span>
-          <small>${escapeHTML(opportunity.classification.label)}</small>
+          <small>${escapeHTML(titleCase(sector))} · HS ${hsCode}</small>
         </div>
+        <span class="fit-verdict fit-verdict--${escapeHTML(opportunity.fitVerdict.id)}">${escapeHTML(opportunity.fitVerdict.label)}</span>
         <button
           class="save-button${saved ? ' is-saved' : ''}"
           type="button"
           data-action="toggle-save"
           data-hs-code="${hsCode}"
           aria-pressed="${saved}"
-          aria-label="${saved ? 'Remove' : 'Add'} ${escapeHTML(opportunity.shortTitle)} ${saved ? 'from' : 'to'} capital plan"
+          aria-label="${saved ? 'Remove' : 'Add'} ${escapeHTML(opportunity.shortTitle)} ${saved ? 'from' : 'to'} opportunity desk"
         >
           <svg aria-hidden="true" viewBox="0 0 24 24"><path d="M6 4h12v17l-6-4-6 4V4Z" /></svg>
         </button>
       </header>
 
       <div class="opportunity-card__identity">
-        <span class="sector-tag">${escapeHTML(titleCase(sector))}</span>
-        <span class="hs-tag">HS ${hsCode}</span>
-        <h3 title="${escapeHTML(product.title || '')}">${escapeHTML(opportunity.shortTitle)}</h3>
+        <h3 class="business-title">${escapeHTML(opportunity.shortTitle)}</h3>
+        <p class="customs-title"><span>Official customs category</span>${escapeHTML(product.title || 'Title unavailable')}</p>
       </div>
 
-      <div class="why-block">
-        <span>Why it surfaced</span>
-        <ul>${opportunity.reasons.map((reason) => `<li>${escapeHTML(reason)}</li>`).join('')}</ul>
+      <div class="entry-wedge">
+        <span>${escapeHTML(ENTRY_MODEL_LABELS[opportunity.route.entry_model] || titleCase(opportunity.route.entry_model))} route <i class="fact-type fact-type--assumption">Modeled</i></span>
+        <p>${escapeHTML(opportunity.route.wedge)}</p>
       </div>
 
-      <div class="dual-signal">
+      <div class="launch-envelope">
         <div>
-          <span>Country signal</span>
-          <strong>${Math.round(opportunity.countrySignal)}</strong>
-          <i><b style="width:${Math.round(opportunity.countrySignal)}%"></b></i>
+          <span>Entry envelope <i class="fact-type fact-type--assumption">Modeled</i></span>
+          <strong>${escapeHTML(Model.capitalRangeLabel(opportunity.route))}</strong>
         </div>
         <div>
-          <span>Your mandate</span>
-          <strong>${Math.round(opportunity.mandateMatch)}</strong>
-          <i><b style="width:${Math.round(opportunity.mandateMatch)}%"></b></i>
+          <span>First paid proof <i class="fact-type fact-type--assumption">Modeled</i></span>
+          <strong>${escapeHTML(Model.monthRangeLabel(opportunity.route))}</strong>
         </div>
       </div>
 
-      <div class="market-facts">
+      <div class="opportunity-card__shock">
         <div>
-          <span>Annual imports <i class="fact-type fact-type--observed">Observed</i></span>
+          <span>India imported <i class="fact-type fact-type--observed">Observed</i></span>
           <strong>${formatUsdCompact(opportunity.importValue)}</strong>
+          <small>in this HS6 market over 12 months</small>
         </div>
         <div>
-          <span>Baseline signal <i class="fact-type fact-type--observed">Observed</i></span>
+          <span>Direction <i class="fact-type fact-type--observed">Observed</i></span>
           <strong class="trend-value trend-value--${trendClass}">${escapeHTML(Model.trendNarrative(opportunity.reductionPct))}</strong>
         </div>
       </div>
 
-      <div class="impact-scenario">
+      <div class="complexity-strip">
         <div>
-          <span>${formatPercentageNumber(state.profile.capturePct)} substitution scenario</span>
-          <strong>${formatUsdCompact(opportunity.scenarioValue)}</strong>
+          <span>Startup complexity</span>
+          <strong>${escapeHTML(opportunity.complexity.label)}</strong>
         </div>
-        <p>gross annual import exposure addressed, not projected revenue</p>
+        <div class="complexity-dots" aria-label="${opportunity.complexity.overall} out of 5 complexity">
+          ${renderComplexityDots(opportunity.complexity.overall)}
+        </div>
       </div>
 
-      <div class="card-route">
-        <span>Suggested screen <i class="fact-type fact-type--assumption">Assumption</i></span>
-        <p>${escapeHTML(opportunity.route)}</p>
+      <div class="critical-info">
+        <div><span>Likely buyer</span><strong>${escapeHTML(opportunity.route.buyer)}</strong></div>
+        <div><span>First proof</span><strong>${escapeHTML(opportunity.route.first_proof)}</strong></div>
       </div>
 
       <footer class="opportunity-card__footer">
-        <span class="evidence-count">${evidenceReady}/4 evidence checks ready</span>
+        <div class="dual-score" aria-label="National and personal scores">
+          <span>India <strong>${Math.round(opportunity.countrySignal)}</strong></span>
+          <span>You <strong>${Math.round(opportunity.personalFit)}</strong></span>
+        </div>
         <button
           class="card-open-button"
           type="button"
           data-action="open-dossier"
           data-hs-code="${hsCode}"
         >
-          Open dossier
+          See the business case
           <svg aria-hidden="true" viewBox="0 0 24 24"><path d="m5 12 14 0m-5-5 5 5-5 5" /></svg>
         </button>
-        <span class="lens-score" title="Score for the selected lens">${lensScoreLabel}</span>
+        <span class="lens-score" title="Selected-lens score">${lensScoreLabel}</span>
       </footer>
     </article>
   `;
@@ -754,17 +738,13 @@ function toggleShortlist(hsCode) {
     state.shortlist.splice(existingIndex, 1);
     delete state.allocations[normalized];
     persistJSON(STORAGE_KEYS.allocations, state.allocations);
-    showToast('Removed from capital plan');
+    showToast('Removed from opportunity desk');
   } else {
     const product = state.products.find((item) => String(item.hs_code) === normalized)
       || (state.selected && state.selected.opportunity.product);
     if (!product) return;
     state.shortlist.unshift(snapshotProduct(product));
-    if (!state.decisions[normalized]) {
-      state.decisions[normalized] = { status: 'screened', notes: '' };
-      persistJSON(STORAGE_KEYS.decisions, state.decisions);
-    }
-    showToast('Added to capital plan');
+    showToast('Added to opportunity desk');
   }
   persistJSON(STORAGE_KEYS.shortlist, state.shortlist);
   updateSavedCount();
@@ -782,7 +762,7 @@ function removeFromPlan(hsCode) {
   updateSavedCount();
   renderPortfolio();
   renderOpportunityResults();
-  showToast('Removed from capital plan');
+  showToast('Removed from opportunity desk');
 }
 
 function snapshotProduct(product) {
@@ -810,8 +790,8 @@ function renderPortfolio() {
     list.innerHTML = `
       <div class="empty-state empty-state--portfolio">
         <span>No opportunities saved</span>
-        <h3>Build a capital plan from evidence, not bookmarks.</h3>
-        <p>Save a market from the opportunity map, open its dossier, and work through the diligence gaps.</p>
+        <h3>Build a comparison set, not a bookmark pile.</h3>
+        <p>Save specific entry routes, compare their launch envelope and complexity, then record what must be proven.</p>
         <button class="primary-button" type="button" data-action="navigate" data-view="discover">Explore opportunities</button>
       </div>
     `;
@@ -823,31 +803,27 @@ function renderPortfolio() {
     const opportunity = Model.deriveOpportunity(
       product,
       state.profile,
-      state.marketContext || Model.createMarketContext([product])
+      state.marketContext || Model.createMarketContext([product]),
+      state.routes
     );
-    const decision = getDecision(saved.hs_code);
     const allocation = Model.finiteNumber(state.allocations[saved.hs_code]) || 0;
-    const evidence = detailEvidenceFor(saved.hs_code);
-    const evidenceCount = Number(Model.finiteNumber(product.last_12m_value_usd) !== null)
-      + Number(Model.finiteNumber(product.reduction_pct) !== null)
-      + Number(Boolean(evidence.supplier))
-      + Number(Boolean(evidence.capex));
+    const notes = getOpportunityNotes(saved.hs_code);
     return `
-      <article class="portfolio-row portfolio-row--${escapeHTML(decision.status)}">
+      <article class="portfolio-row">
         <div class="portfolio-rank">${String(index + 1).padStart(2, '0')}</div>
         <div class="portfolio-identity">
-          <span>${escapeHTML(opportunity.classification.label)} · HS ${escapeHTML(saved.hs_code)}</span>
+          <span class="fit-verdict fit-verdict--${escapeHTML(opportunity.fitVerdict.id)}">${escapeHTML(opportunity.fitVerdict.label)}</span>
           <h3>${escapeHTML(opportunity.shortTitle)}</h3>
-          <p>${formatUsdCompact(opportunity.importValue)} annual imports · ${evidenceCount}/4 evidence checks ready</p>
+          <p>${escapeHTML(opportunity.route.wedge)}</p>
+          <small>HS ${escapeHTML(saved.hs_code)} · ${formatUsdCompact(opportunity.importValue)} annual imports · ${escapeHTML(opportunity.complexity.label)}</small>
         </div>
-        <label class="portfolio-field">
-          <span>Decision stage</span>
-          <select data-action="set-stage" data-hs-code="${escapeHTML(saved.hs_code)}">
-            ${decisionOptions(decision.status)}
-          </select>
-        </label>
+        <div class="portfolio-field">
+          <span>Modeled entry</span>
+          <strong>${escapeHTML(Model.capitalRangeLabel(opportunity.route))}</strong>
+          <small>${escapeHTML(Model.monthRangeLabel(opportunity.route))}</small>
+        </div>
         <label class="portfolio-field portfolio-allocation">
-          <span>Plan allocation (₹ crore)</span>
+          <span>Indicative cheque (₹ crore)</span>
           <input
             type="number"
             min="0"
@@ -860,7 +836,8 @@ function renderPortfolio() {
           />
         </label>
         <div class="portfolio-actions">
-          <button class="text-button" type="button" data-action="open-dossier" data-hs-code="${escapeHTML(saved.hs_code)}">Open dossier</button>
+          <span>${notes ? 'Private note saved' : `${opportunity.route.critical_unknowns.length} critical unknowns`}</span>
+          <button class="text-button" type="button" data-action="open-dossier" data-hs-code="${escapeHTML(saved.hs_code)}">Open business case</button>
           <button class="text-button text-button--danger" type="button" data-action="remove-plan" data-hs-code="${escapeHTML(saved.hs_code)}">Remove</button>
         </div>
       </article>
@@ -879,9 +856,15 @@ function renderPortfolioStats() {
     const value = Model.finiteNumber(product.last_12m_value_usd);
     return sum + (value === null ? 0 : value);
   }, 0);
-  const missingChecks = state.shortlist.reduce((sum, item) => {
-    const evidence = detailEvidenceFor(item.hs_code);
-    return sum + Number(!evidence.supplier) + Number(!evidence.capex);
+  const researchOnly = state.shortlist.reduce((sum, saved) => {
+    const product = state.products.find((item) => String(item.hs_code) === saved.hs_code) || saved;
+    const opportunity = Model.deriveOpportunity(
+      product,
+      state.profile,
+      state.marketContext || Model.createMarketContext([product]),
+      state.routes
+    );
+    return sum + Number(opportunity.fitVerdict.id === 'research');
   }, 0);
 
   document.getElementById('portfolioAvailable').textContent = formatInr(available);
@@ -903,87 +886,21 @@ function renderPortfolioStats() {
     allocationStatus.dataset.state = 'ready';
   }
   document.getElementById('portfolioEvidenceSummary').textContent = state.shortlist.length
-    ? `${missingChecks} supplier or CAPEX evidence gaps remain across ${state.shortlist.length} opportunities.`
-    : 'Add opportunities to begin a diligence plan.';
+    ? `${state.shortlist.length - researchOnly} reviewed business ${state.shortlist.length - researchOnly === 1 ? 'route' : 'routes'} · ${researchOnly} trade ${researchOnly === 1 ? 'signal' : 'signals'} still need route definition.`
+    : 'Add opportunities to compare launch routes and unresolved evidence.';
 }
 
-function decisionOptions(selected) {
-  return [
-    ['screened', 'Screened'],
-    ['diligence', 'In diligence'],
-    ['ready', 'Ready to approach'],
-    ['hold', 'Hold'],
-    ['rejected', 'Rejected']
-  ].map(([value, label]) => (
-    `<option value="${value}"${selected === value ? ' selected' : ''}>${label}</option>`
-  )).join('');
-}
-
-function setDecision(hsCode, status, options = {}) {
-  const normalizedStatus = ['screened', 'diligence', 'ready', 'hold', 'rejected'].includes(status)
-    ? status
-    : 'screened';
-  const existing = getDecision(hsCode);
-  state.decisions[hsCode] = { status: normalizedStatus, notes: existing.notes };
-  if (!isSaved(hsCode)) {
-    const product = state.products.find((item) => String(item.hs_code) === String(hsCode));
-    if (product) state.shortlist.unshift(snapshotProduct(product));
-    persistJSON(STORAGE_KEYS.shortlist, state.shortlist);
-    updateSavedCount();
-  }
-  persistJSON(STORAGE_KEYS.decisions, state.decisions);
-  renderPortfolio();
-  updateDossierSaveButton();
-  if (options.rerenderDossier !== false && state.selected) renderDossier();
-  showToast(`Decision updated: ${decisionLabel(normalizedStatus)}`);
-}
-
-function getDecision(hsCode) {
-  const value = state.decisions[hsCode];
-  return {
-    status: value && ['screened', 'diligence', 'ready', 'hold', 'rejected'].includes(value.status)
-      ? value.status
-      : 'screened',
-    notes: value && typeof value.notes === 'string' ? value.notes : ''
-  };
-}
-
-function decisionLabel(status) {
-  return {
-    screened: 'Screened',
-    diligence: 'In diligence',
-    ready: 'Ready to approach',
-    hold: 'Hold',
-    rejected: 'Rejected'
-  }[status] || 'Screened';
-}
-
-function saveDecisionNotes(hsCode) {
+function saveOpportunityNotes(hsCode) {
   const textarea = document.getElementById('decisionNotes');
   if (!textarea) return;
-  const current = getDecision(hsCode);
-  state.decisions[hsCode] = {
-    status: current.status,
-    notes: textarea.value.trim().slice(0, 5000)
-  };
-  persistJSON(STORAGE_KEYS.decisions, state.decisions);
-  showToast('Decision note saved on this device');
+  state.notes[hsCode] = textarea.value.trim().slice(0, 5000);
+  persistJSON(STORAGE_KEYS.notes, state.notes);
+  renderPortfolio();
+  showToast('Opportunity note saved on this device');
 }
 
-function toggleDiligence(hsCode, index, checked) {
-  if (!Number.isInteger(index) || index < 0 || index >= DILIGENCE_TASKS.length) return;
-  const checks = getDiligence(hsCode);
-  checks[index] = Boolean(checked);
-  state.diligence[hsCode] = checks;
-  persistJSON(STORAGE_KEYS.diligence, state.diligence);
-  const count = checks.filter(Boolean).length;
-  const progress = document.getElementById('diligenceProgress');
-  if (progress) progress.textContent = `${count}/${DILIGENCE_TASKS.length} completed`;
-}
-
-function getDiligence(hsCode) {
-  const existing = state.diligence[hsCode];
-  return Array.from({ length: DILIGENCE_TASKS.length }, (_, index) => Boolean(existing && existing[index]));
+function getOpportunityNotes(hsCode) {
+  return typeof state.notes[hsCode] === 'string' ? state.notes[hsCode] : '';
 }
 
 function exportOpportunityScreen() {
@@ -995,7 +912,11 @@ function exportOpportunityScreen() {
     [
       'rank',
       'hs_code',
-      'title',
+      'business_name',
+      'official_customs_title',
+      'route_id',
+      'entry_model',
+      'fit_verdict',
       'sectors',
       'annual_import_usd',
       'import_value_change_vs_baseline_pct',
@@ -1004,14 +925,24 @@ function exportOpportunityScreen() {
       'combined_fit_derived',
       'scenario_pct_assumption',
       'gross_import_exposure_addressed_usd',
-      'screening_classification',
-      'suggested_diligence_route',
-      'capital_fit'
+      'modeled_entry_capital_min_inr',
+      'modeled_entry_capital_max_inr',
+      'modeled_first_proof_min_months',
+      'modeled_first_proof_max_months',
+      'complexity_out_of_5',
+      'likely_buyer',
+      'entry_wedge',
+      'critical_unknowns',
+      'route_confidence'
     ],
     ...state.filtered.map((opportunity, index) => [
       index + 1,
       opportunity.product.hs_code,
+      opportunity.shortTitle,
       opportunity.product.title,
+      opportunity.route.route_id,
+      opportunity.route.entry_model,
+      opportunity.fitVerdict.label,
       opportunity.sectors.join(';'),
       opportunity.importValue,
       opportunity.reductionPct === null ? '' : -opportunity.reductionPct * 100,
@@ -1020,9 +951,15 @@ function exportOpportunityScreen() {
       opportunity.combinedFit.toFixed(2),
       state.profile.capturePct,
       opportunity.scenarioValue,
-      opportunity.classification.label,
-      opportunity.route,
-      'Unverified unless a sourced capability record is shown in the dossier'
+      opportunity.route.capital_min_inr,
+      opportunity.route.capital_max_inr,
+      opportunity.route.months_min,
+      opportunity.route.months_max,
+      opportunity.complexity.overall,
+      opportunity.route.buyer,
+      opportunity.route.wedge,
+      opportunity.route.critical_unknowns.join(';'),
+      opportunity.route.confidence
     ])
   ];
   downloadCsv(rows, `build-for-india-opportunity-screen-${isoDate()}.csv`);
@@ -1031,38 +968,50 @@ function exportOpportunityScreen() {
 
 function exportCapitalPlan() {
   if (!state.shortlist.length) {
-    showToast('Add opportunities before exporting a capital plan', 'error');
+    showToast('Add opportunities before exporting a comparison', 'error');
     return;
   }
   const rows = [
     [
       'hs_code',
-      'title',
-      'decision_stage',
-      'planned_allocation_inr',
+      'business_name',
+      'official_customs_title',
+      'route_id',
+      'fit_verdict',
+      'indicative_cheque_inr',
+      'modeled_entry_capital',
+      'modeled_first_paid_proof',
+      'complexity_out_of_5',
       'annual_import_usd',
-      'supplier_evidence',
-      'verified_capex_evidence',
-      'decision_notes'
+      'critical_unknowns',
+      'private_notes'
     ],
     ...state.shortlist.map((saved) => {
       const product = state.products.find((item) => String(item.hs_code) === saved.hs_code) || saved;
-      const evidence = detailEvidenceFor(saved.hs_code);
-      const decision = getDecision(saved.hs_code);
+      const opportunity = Model.deriveOpportunity(
+        product,
+        state.profile,
+        state.marketContext || Model.createMarketContext([product]),
+        state.routes
+      );
       return [
         saved.hs_code,
+        opportunity.shortTitle,
         product.title,
-        decisionLabel(decision.status),
+        opportunity.route.route_id,
+        opportunity.fitVerdict.label,
         state.allocations[saved.hs_code] || 0,
+        Model.capitalRangeLabel(opportunity.route),
+        Model.monthRangeLabel(opportunity.route),
+        opportunity.complexity.overall,
         product.last_12m_value_usd,
-        evidence.supplier ? 'Available' : 'Gap',
-        evidence.capex ? 'Available' : 'Gap',
-        decision.notes
+        opportunity.route.critical_unknowns.join(';'),
+        getOpportunityNotes(saved.hs_code)
       ];
     })
   ];
-  downloadCsv(rows, `build-for-india-capital-plan-${isoDate()}.csv`);
-  showToast('Capital plan exported');
+  downloadCsv(rows, `build-for-india-opportunity-comparison-${isoDate()}.csv`);
+  showToast('Opportunity comparison exported');
 }
 
 async function openDossier(hsCode, trigger) {
@@ -1076,7 +1025,7 @@ async function openDossier(hsCode, trigger) {
   if (state.detailController) state.detailController.abort();
   state.detailController = new AbortController();
   state.lastFocusedElement = trigger || document.activeElement;
-  const opportunity = Model.deriveOpportunity(product, state.profile, state.marketContext);
+  const opportunity = Model.deriveOpportunity(product, state.profile, state.marketContext, state.routes);
   state.selected = { opportunity, detail: null, capability: null };
   showDossierShell(opportunity);
 
@@ -1131,7 +1080,7 @@ function showDossierShell(opportunity) {
   document.body.classList.add('dialog-open');
   document.getElementById('dossierTitle').textContent = 'Opportunity dossier';
   document.getElementById('dossierDescription').textContent =
-    `Evidence, scenarios, and diligence actions for ${opportunity.shortTitle}.`;
+    `Business route, complexity, evidence, and unresolved questions for ${opportunity.shortTitle}.`;
   document.getElementById('dossierCode').textContent = `HS ${opportunity.product.hs_code}`;
   document.getElementById('dossierContent').innerHTML = `
     <div class="dossier-loading" role="status">
@@ -1176,17 +1125,13 @@ function renderDossier() {
       || Model.finiteNumber(item.capex_max) !== null
     )
   )) || null;
-  const evidence = {
-    demand: Model.finiteNumber(product.last_12m_value_usd) !== null,
-    trend: Model.finiteNumber(product.reduction_pct) !== null,
-    supplier: partners.length > 0,
-    capex: Boolean(verifiedCapability)
-  };
-  const evidenceCount = Object.values(evidence).filter(Boolean).length;
-  const decision = getDecision(product.hs_code);
-  const checks = getDiligence(product.hs_code);
+  const route = opportunity.route;
+  const notes = getOpportunityNotes(product.hs_code);
   const hhi = Model.finiteNumber(progress.hhi_current);
   const topPartner = partners[0] || null;
+  const routeUnknowns = Array.isArray(route.critical_unknowns) ? route.critical_unknowns : [];
+  const requiredStrengths = Array.isArray(route.required_strengths) ? route.required_strengths : [];
+  const complexityDimensions = Object.entries(opportunity.complexity.dimensions);
 
   document.getElementById('dossierCode').textContent = `HS ${product.hs_code}`;
   document.getElementById('dossierContent').innerHTML = `
@@ -1195,14 +1140,15 @@ function renderDossier() {
         <div class="dossier-tags">
           <span class="sector-tag">${escapeHTML(titleCase(opportunity.sectors[0] || 'unclassified'))}</span>
           <span class="classification-tag">${escapeHTML(opportunity.classification.label)}</span>
+          <span class="fit-verdict fit-verdict--${escapeHTML(opportunity.fitVerdict.id)}">${escapeHTML(opportunity.fitVerdict.label)}</span>
           ${opportunity.isStructural ? '<span class="structural-tag">Structural exposure</span>' : ''}
         </div>
-        <h1>${escapeHTML(opportunity.shortTitle)}</h1>
-        <p>${escapeHTML(detail.description || product.title || '')}</p>
+        <h1 class="business-title">${escapeHTML(opportunity.shortTitle)}</h1>
+        <p class="customs-title"><span>Official HS6 category</span>${escapeHTML(product.title || detail.description || 'Title unavailable')}</p>
         <div class="source-line">
-          <span>Source <strong>${escapeHTML(formatSource(state.metadata.source || detail.source))}</strong></span>
+          <span>Trade source <strong>${escapeHTML(formatSource(state.metadata.source || detail.source))}</strong></span>
           <span>Through <strong>${escapeHTML(formatPeriod(detail.latest_period || state.metadata.latestPeriod))}</strong></span>
-          <span>Evidence <strong>${evidenceCount}/4 ready</strong></span>
+          <span>Route status <strong>${route.confidence === 'curated_model' ? 'Reviewed model' : 'Research only'}</strong></span>
         </div>
       </header>
 
@@ -1224,25 +1170,81 @@ function renderDossier() {
         </article>
         <article>
           <span>Your mandate <i class="fact-type fact-type--derived">Derived</i></span>
-          <strong>${Math.round(opportunity.mandateMatch)}<em>/100</em></strong>
-          <small>sector, milestone, ambition, and role</small>
+          <strong>${Math.round(opportunity.personalFit)}<em>/100</em></strong>
+          <small>capital, time, route, strengths, buyers and sector</small>
         </article>
       </section>
 
-      <section class="thesis-panel">
-        <div>
-          <p class="section-kicker">Screening thesis</p>
-          <h2>Why this deserves a closer look</h2>
+      <section class="business-brief">
+        <header>
+          <div>
+          <p class="section-kicker">Specific route in</p>
+          <h2>${escapeHTML(route.wedge)}</h2>
+          </div>
+        </header>
+        <div class="business-brief__scope">
+          <p><strong>Includes</strong>${escapeHTML(route.includes)}</p>
+          <p><strong>Excludes</strong>${escapeHTML(route.excludes)}</p>
         </div>
-        <p>${escapeHTML(buildThesis(opportunity, topPartner))}</p>
-        <div class="thesis-caveat">
-          <strong>What this does not prove</strong>
-          <span>Technical feasibility, customer conversion, project CAPEX, unit economics, policy eligibility, or investment return.</span>
+        <div class="fit-verdict-detail fit-verdict-detail--${escapeHTML(opportunity.fitVerdict.id)}">
+          <strong>${escapeHTML(opportunity.fitVerdict.label)}</strong>
+          <span>${escapeHTML(opportunity.fitVerdict.detail)}</span>
         </div>
+      </section>
+
+      <section class="launch-path" aria-labelledby="launch-path-title">
+        <header>
+          <div>
+            <p class="section-kicker">Launch path · modeled, not quoted plant CAPEX</p>
+            <h2 id="launch-path-title">How this could become a company test</h2>
+          </div>
+          <span class="evidence-status evidence-status--assumption">Modeled</span>
+        </header>
+        <div class="launch-envelope">
+          <div><span>Entry capital</span><strong>${escapeHTML(Model.capitalRangeLabel(route))}</strong><small>Your modeled stack: ${escapeHTML(formatInr(opportunity.projectCapitalInr))}</small></div>
+          <div><span>First paid proof</span><strong>${escapeHTML(Model.monthRangeLabel(route))}</strong><small>Your window: ${state.profile.horizonMonths} months</small></div>
+          <div><span>Likely buyer</span><strong>${escapeHTML(route.buyer)}</strong></div>
+          <div><span>First proof</span><strong>${escapeHTML(route.first_proof)}</strong></div>
+        </div>
+        <p class="source-note">${escapeHTML(route.source_note || 'Modeled screening route; validate with buyers, suppliers and current quotes.')}</p>
+      </section>
+
+      <section class="dossier-complexity" aria-labelledby="complexity-title">
+        <header>
+          <div>
+            <p class="section-kicker">Startup complexity</p>
+            <h2 id="complexity-title">${escapeHTML(opportunity.complexity.label)} · ${opportunity.complexity.overall}/5</h2>
+          </div>
+          <div class="complexity-dots" aria-hidden="true">${renderComplexityDots(opportunity.complexity.overall)}</div>
+        </header>
+        <div class="complexity-grid">
+          ${complexityDimensions.map(([key, value]) => `
+            <div>
+              <span>${escapeHTML(complexityDimensionLabel(key))}</span>
+              <strong>${value}/5</strong>
+              <div class="complexity-dots" aria-hidden="true">${renderComplexityDots(value)}</div>
+            </div>
+          `).join('')}
+        </div>
+        <p>Scores are a comparative screening model, not a feasibility study. Standards and approvals still require current product-specific checks.</p>
       </section>
 
       <div class="dossier-layout">
         <div class="dossier-main">
+          <section class="evidence-section" aria-labelledby="case-title">
+            <header>
+              <div>
+                <p class="section-kicker">Why now</p>
+                <h2 id="case-title">The business case to challenge</h2>
+              </div>
+            </header>
+            <p>${escapeHTML(buildThesis(opportunity, topPartner))}</p>
+            <div class="thesis-caveat">
+              <strong>What this does not prove</strong>
+              <span>Domestic absence, addressable demand, technical feasibility, customer conversion, verified project CAPEX, unit economics, policy eligibility, or investment return.</span>
+            </div>
+          </section>
+
           <section class="evidence-section" aria-labelledby="demand-evidence-title">
             <header>
               <div>
@@ -1267,33 +1269,16 @@ function renderDossier() {
             ${renderPartnerEvidence(partners, hhi, detail.partner_period, detail.partner_source)}
           </section>
 
-          <section class="evidence-section diligence-section" aria-labelledby="diligence-title">
+          <section class="evidence-section evidence-gaps" aria-labelledby="unknowns-title">
             <header>
               <div>
-                <p class="section-kicker">90-day path</p>
-                <h2 id="diligence-title">Turn the signal into a decision</h2>
+                <p class="section-kicker">Kill questions</p>
+                <h2 id="unknowns-title">What must be true before capital moves</h2>
               </div>
-              <span class="diligence-progress" id="diligenceProgress">${checks.filter(Boolean).length}/${DILIGENCE_TASKS.length} completed</span>
+              <span class="evidence-status evidence-status--gap">Unresolved</span>
             </header>
-            <div class="diligence-list">
-              ${DILIGENCE_TASKS.map((task, index) => `
-                <label class="diligence-task${checks[index] ? ' is-complete' : ''}">
-                  <input
-                    type="checkbox"
-                    data-action="toggle-diligence"
-                    data-hs-code="${escapeHTML(product.hs_code)}"
-                    data-index="${index}"
-                    ${checks[index] ? 'checked' : ''}
-                  />
-                  <span class="task-check" aria-hidden="true"></span>
-                  <span class="task-period">${escapeHTML(task.period)}</span>
-                  <span class="task-copy">
-                    <strong>${escapeHTML(task.title)}</strong>
-                    <small>${escapeHTML(task.detail)}</small>
-                  </span>
-                </label>
-              `).join('')}
-            </div>
+            <ol>${routeUnknowns.map((unknown) => `<li>${escapeHTML(unknown)}</li>`).join('')}</ol>
+            ${requiredStrengths.length ? `<p><strong>Operator strengths this route likely needs:</strong> ${requiredStrengths.map(Model.strengthLabel).map(escapeHTML).join(', ')}.</p>` : ''}
           </section>
         </div>
 
@@ -1316,7 +1301,7 @@ function renderDossier() {
             <header>
               <div>
                 <p class="section-kicker">Capital evidence</p>
-                <h2>${verifiedCapability ? 'Verified record found' : 'CAPEX fit unverified'}</h2>
+                <h2>${verifiedCapability ? 'External CAPEX record found' : 'Project CAPEX still unverified'}</h2>
               </div>
               <span class="evidence-status ${verifiedCapability ? 'evidence-status--ready' : 'evidence-status--gap'}">
                 ${verifiedCapability ? 'Sourced' : 'Gap'}
@@ -1326,36 +1311,24 @@ function renderDossier() {
           </section>
 
           <section class="decision-panel">
-            <p class="section-kicker">Decision log</p>
-            <h2>What happens next?</h2>
-            <div class="decision-buttons" role="group" aria-label="Opportunity decision">
-              ${['diligence', 'ready', 'hold', 'rejected'].map((status) => `
-                <button
-                  type="button"
-                  data-action="set-decision"
-                  data-hs-code="${escapeHTML(product.hs_code)}"
-                  data-status="${status}"
-                  aria-pressed="${decision.status === status}"
-                  class="${decision.status === status ? 'is-active' : ''}"
-                >${escapeHTML(decisionLabel(status))}</button>
-              `).join('')}
-            </div>
+            <p class="section-kicker">Private notebook</p>
+            <h2>Record your thesis, not a fake stage.</h2>
             <label for="decisionNotes">
-              <span>Private decision note</span>
-              <textarea id="decisionNotes" rows="5" maxlength="5000" placeholder="What must be true? Who will you call?">${escapeHTML(decision.notes)}</textarea>
+              <span>What did you learn? What would kill the case?</span>
+              <textarea id="decisionNotes" rows="7" maxlength="5000" placeholder="Buyer, price, qualification path, quote, disconfirming evidence…">${escapeHTML(notes)}</textarea>
             </label>
             <button
               class="secondary-button secondary-button--wide"
               type="button"
               data-action="save-notes"
               data-hs-code="${escapeHTML(product.hs_code)}"
-            >Save note on this device</button>
+            >Save private note</button>
           </section>
         </aside>
       </div>
 
       <footer class="dossier-footer">
-        <p>Every signal is only as useful as the diligence it triggers.</p>
+        <p>No real-money transaction occurs here. Validate the route independently before committing capital.</p>
         <button class="text-button" type="button" data-action="navigate" data-view="method">Read the ranking method</button>
       </footer>
     </article>
@@ -1377,26 +1350,28 @@ function renderDossierError(error) {
 function updateDossierSaveButton() {
   const button = document.getElementById('dossierSaveBtn');
   if (!state.selected) {
-    button.textContent = 'Add to capital plan';
+    button.textContent = 'Add to opportunity desk';
     button.setAttribute('aria-pressed', 'false');
     return;
   }
   const saved = isSaved(state.selected.opportunity.product.hs_code);
-  button.textContent = saved ? 'Remove from capital plan' : 'Add to capital plan';
+  button.textContent = saved ? 'Remove from opportunity desk' : 'Add to opportunity desk';
   button.setAttribute('aria-pressed', String(saved));
 }
 
 function buildThesis(opportunity, topPartner) {
   const demand = formatUsdCompact(opportunity.importValue);
   const reasons = opportunity.reasons.join(' and ').replace(/\.$/, '');
-  let thesis = `${opportunity.shortTitle} surfaced because ${reasons.toLowerCase()}. India imported ${demand} over the latest 12-month window.`;
+  let thesis = `${opportunity.shortTitle} surfaced because ${reasons.toLowerCase()}. The route is to ${opportunity.route.wedge.charAt(0).toLowerCase()}${opportunity.route.wedge.slice(1)} India imported ${demand} in the broader HS6 category over the latest 12-month window.`;
   if (topPartner && Model.finiteNumber(topPartner.share) !== null) {
     thesis += ` The latest supplier snapshot places ${formatPercentage(topPartner.share)} with ${topPartner.partner_country || 'the leading partner'}.`;
   }
   if (opportunity.isStructural) {
     thesis += ' Treat this as a national strategy problem before treating it as a company-formation opportunity.';
+  } else if (opportunity.fitVerdict.id === 'research') {
+    thesis += ' The customs signal is not yet translated into a reviewed company route, so resolve the product mix before acting.';
   } else {
-    thesis += ` The next question is whether a defensible ${opportunity.classification.label.toLowerCase()} wedge exists.`;
+    thesis += ' The decisive question is whether a buyer will validate the specification, price and qualification path behind this modeled entry route.';
   }
   return thesis;
 }
@@ -1533,7 +1508,7 @@ function renderCapitalEvidence(product, capability, opportunity) {
     const capex = formatUsdRange(capability.capex_min, capability.capex_max);
     return `
       <div class="capital-record">
-        <div><span>Verified CAPEX range</span><strong>${escapeHTML(capex)}</strong></div>
+        <div><span>Sourced external CAPEX range</span><strong>${escapeHTML(capex)}</strong></div>
         <div><span>Source</span><strong>${escapeHTML(capability.source || 'Verified capability record')}</strong></div>
         ${capability.machines ? `<div><span>Machinery</span><strong>${escapeHTML(summarizeCapability(capability.machines))}</strong></div>` : ''}
         ${capability.skills ? `<div><span>Skills</span><strong>${escapeHTML(summarizeCapability(capability.skills))}</strong></div>` : ''}
@@ -1551,11 +1526,11 @@ function renderCapitalEvidence(product, capability, opportunity) {
     : '';
   return `
     <div class="capital-gap">
-      <span>Your mandate</span>
-      <strong>${escapeHTML(formatInr(state.profile.capitalInr))}</strong>
-      <small>${escapeHTML(Model.capitalBandLabel(state.profile.capitalInr))}</small>
+      <span>Modeled validation / entry envelope</span>
+      <strong>${escapeHTML(Model.capitalRangeLabel(opportunity.route))}</strong>
+      <small>Compared with your ${escapeHTML(formatInr(opportunity.projectCapitalInr))} modeled capital stack</small>
     </div>
-    <p>${escapeHTML(opportunity.route)}</p>
+    <p>This range screens a narrow route to first paid proof. It is not a vendor quote, plant CAPEX estimate, or promise that the project can be financed.</p>
     ${catalogueEstimate}
     <ul class="gap-list">
       <li>Process and capacity definition</li>
@@ -1564,6 +1539,23 @@ function renderCapitalEvidence(product, capability, opportunity) {
       <li>Standards, utilities, land, and approvals</li>
     </ul>
   `;
+}
+
+function renderComplexityDots(valueInput) {
+  const value = Math.round(Model.clamp(Number(valueInput) || 3, 1, 5));
+  return Array.from({ length: 5 }, (_, index) => (
+    `<i class="complexity-dot${index < value ? ' is-filled' : ''}"></i>`
+  )).join('');
+}
+
+function complexityDimensionLabel(value) {
+  return {
+    capital: 'Capital intensity',
+    technical: 'Technical difficulty',
+    regulatory: 'Regulation and standards',
+    supply_chain: 'Supply-chain difficulty',
+    buyer_qualification: 'Buyer qualification'
+  }[value] || titleCase(String(value).replaceAll('_', ' '));
 }
 
 function updateDossierScenario() {
@@ -1588,6 +1580,8 @@ function renderMethodCoverage() {
     `${numberFormatter.format(demand)} / ${numberFormatter.format(state.products.length)}`;
   document.getElementById('methodTrendCoverage').textContent =
     `${numberFormatter.format(trend)} / ${numberFormatter.format(state.products.length)}`;
+  document.getElementById('methodRouteCoverage').textContent =
+    numberFormatter.format(state.routes.length);
   document.getElementById('methodCapexCoverage').textContent =
     `${numberFormatter.format(capex)} / ${numberFormatter.format(state.products.length)}`;
 }
@@ -1623,23 +1617,12 @@ function sanitizeNumberMap(value) {
   }));
 }
 
-function sanitizeDecisionMap(value) {
-  if (!value || typeof value !== 'object' || Array.isArray(value)) return {};
-  const allowed = new Set(['screened', 'diligence', 'ready', 'hold', 'rejected']);
-  return Object.fromEntries(Object.entries(value).flatMap(([key, entry]) => {
-    if (!/^\d{1,10}$/.test(key) || !entry || typeof entry !== 'object') return [];
-    return [[key, {
-      status: allowed.has(entry.status) ? entry.status : 'screened',
-      notes: typeof entry.notes === 'string' ? entry.notes.slice(0, 5000) : ''
-    }]];
-  }));
-}
-
-function sanitizeChecklistMap(value) {
+function sanitizeNoteMap(value) {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return {};
   return Object.fromEntries(Object.entries(value).flatMap(([key, entry]) => {
-    if (!/^\d{1,10}$/.test(key) || !Array.isArray(entry)) return [];
-    return [[key, entry.slice(0, DILIGENCE_TASKS.length).map(Boolean)]];
+    return /^\d{1,10}$/.test(key) && typeof entry === 'string'
+      ? [[key, entry.slice(0, 5000)]]
+      : [];
   }));
 }
 

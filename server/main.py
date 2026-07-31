@@ -16,7 +16,7 @@ from fastapi.responses import FileResponse, HTMLResponse
 from fastapi.staticfiles import StaticFiles
 from psycopg2.extras import RealDictCursor
 
-from . import db, jobs
+from . import db, enrichment, jobs
 from .etl import comtrade, dgcis, normalize
 from dateutil.relativedelta import relativedelta
 from .schemas import DomesticCapabilityPayload, ProductCard
@@ -181,6 +181,20 @@ def serve_index():
 @app.get("/health")
 def health() -> Dict[str, bool]:
     return {"ok": True}
+
+
+@app.get("/api/opportunity-routes")
+def opportunity_routes() -> Dict[str, Any]:
+    """Return the validated, versioned opportunity-route registry."""
+
+    try:
+        return enrichment.load_opportunity_routes()
+    except enrichment.RouteRegistryError as exc:
+        LOGGER.error("Opportunity-route registry unavailable: %s", exc)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Opportunity route registry unavailable",
+        ) from exc
 
 
 @app.post("/admin/seed")

@@ -188,6 +188,24 @@ def init_db(conn) -> None:
         cur.execute("ALTER TABLE baseline_imports ADD COLUMN IF NOT EXISTS updated_at timestamptz DEFAULT now()")
         cur.execute("ALTER TABLE import_progress ADD COLUMN IF NOT EXISTS last_updated timestamptz DEFAULT now()")
         cur.execute("ALTER TABLE domestic_capability ADD COLUMN IF NOT EXISTS created_at timestamptz DEFAULT now()")
+        # Older deployments created this table without the uniqueness required
+        # by upsert_domestic_capability's ON CONFLICT target. Keep the newest
+        # record deterministically before adding the idempotent index.
+        cur.execute(
+            """
+            DELETE FROM domestic_capability older
+            USING domestic_capability newer
+            WHERE older.hs_code IS NOT NULL
+              AND older.hs_code = newer.hs_code
+              AND older.id < newer.id
+            """
+        )
+        cur.execute(
+            """
+            CREATE UNIQUE INDEX IF NOT EXISTS uq_domestic_capability_hs_code
+              ON domestic_capability (hs_code)
+            """
+        )
     LOGGER.info("Database schema ensured")
 
 
