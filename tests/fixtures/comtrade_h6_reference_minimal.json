@@ -1,0 +1,48 @@
+{
+  "more": false,
+  "minimumInputLength": 2,
+  "classCode": "H6",
+  "className": "HS2022",
+  "results": [
+    {
+      "id": "TOTAL",
+      "text": "Total - All H6 commodities",
+      "parent": "#",
+      "isLeaf": "0",
+      "aggrlevel": 0,
+      "standardUnitAbbr": "n/a"
+    },
+    {
+      "id": "85",
+      "text": "85 - Electrical machinery and equipment and parts thereof",
+      "parent": "TOTAL",
+      "isLeaf": "0",
+      "aggrlevel": 2,
+      "standardUnitAbbr": "n/a"
+    },
+    {
+      "id": "8507",
+      "text": "8507 - Electric accumulators, including separators therefor; whether or not rectangular (including square)",
+      "parent": "85",
+      "isLeaf": "0",
+      "aggrlevel": 4,
+      "standardUnitAbbr": "n/a"
+    },
+    {
+      "id": "850760",
+      "text": "850760 - Electric accumulators; lithium-ion, including separators, whether or not rectangular (including square)",
+      "parent": "8507",
+      "isLeaf": "1",
+      "aggrlevel": 6,
+      "standardUnitAbbr": "u"
+    },
+    {
+      "id": "850780",
+      "text": "850780 - Electric accumulators; other than lead-acid, nickel-cadmium, nickel-metal hydride and lithium-ion, including separators, whether or not rectangular (including square)",
+      "parent": "8507",
+      "isLeaf": "1",
+      "aggrlevel": 6,
+      "standardUnitAbbr": "u"
+    }
+  ]
+}

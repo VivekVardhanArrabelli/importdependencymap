@@ -4,26 +4,61 @@ on:
   schedule:
     - cron: '0 3 * * *'
   workflow_dispatch:
+    inputs:
+      lookback_months:
+        description: Complete months to refresh (18 for an initial backfill)
+        required: false
+        default: '18'
+
+concurrency:
+  group: nightly-etl
+  cancel-in-progress: false
 
 jobs:
   run:
     runs-on: ubuntu-latest
+    timeout-minutes: 120
+    env:
+      ADMIN_KEY: ${{ secrets.ADMIN_KEY }}
+      DEPLOY_URL: ${{ secrets.DEPLOY_URL }}
+      LOOKBACK_MONTHS: ${{ github.event_name == 'workflow_dispatch' && inputs.lookback_months || '2' }}
     steps:
-      - name: Trigger Nightly ETL (server-computed window)
-        env:
-          ADMIN_KEY: ${{ secrets.ADMIN_KEY }}
-          DEPLOY_URL: ${{ secrets.DEPLOY_URL }}
+      - name: Validate configuration
         run: |
           : "${ADMIN_KEY:?Missing ADMIN_KEY}"
           : "${DEPLOY_URL:?Missing DEPLOY_URL}"
-          curl -fsS -X POST \
-            -H "Authorization: Bearer ${ADMIN_KEY}" \
-            "${DEPLOY_URL}/admin/etl/nightly"
-      - name: Recompute metrics (extra safety)
-        env:
-          ADMIN_KEY: ${{ secrets.ADMIN_KEY }}
-          DEPLOY_URL: ${{ secrets.DEPLOY_URL }}
+          : "${LOOKBACK_MONTHS:?Missing LOOKBACK_MONTHS}"
+          test "${LOOKBACK_MONTHS}" -ge 1
+          test "${LOOKBACK_MONTHS}" -le 36
+
+      - name: Synchronize complete HS6 catalogue
         run: |
-          curl -fsS -X POST \
+          curl --fail --show-error --silent --max-time 180 \
+            -X POST \
+            -H "Authorization: Bearer ${ADMIN_KEY}" \
+            "${DEPLOY_URL}/admin/etl/comtrade/catalog"
+
+      - name: Refresh complete months in timeout-safe partitions
+        run: |
+          latest="$(
+            curl --fail --show-error --silent --max-time 120 \
+              -H "Authorization: Bearer ${ADMIN_KEY}" \
+              "${DEPLOY_URL}/admin/etl/comtrade/availability" |
+              jq -er '.period'
+          )"
+          latest_date="${latest:0:4}-${latest:4:2}-01"
+          for ((offset=LOOKBACK_MONTHS-1; offset>=0; offset--)); do
+            period="$(date -u -d "${latest_date} -${offset} months" +%Y-%m)"
+            echo "Refreshing ${period}"
+            curl --fail --show-error --silent --max-time 840 \
+              -X POST \
+              -H "Authorization: Bearer ${ADMIN_KEY}" \
+              "${DEPLOY_URL}/admin/etl/comtrade?from=${period}&to=${period}&sync_catalog=false&recompute=false"
+          done
+
+      - name: Recompute analytics once
+        run: |
+          curl --fail --show-error --silent --max-time 300 \
+            -X POST \
             -H "Authorization: Bearer ${ADMIN_KEY}" \
             "${DEPLOY_URL}/admin/recompute"

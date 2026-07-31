@@ -14,7 +14,7 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@400;500;700&family=Playfair+Display:ital,wght@0,400;0,600;0,700;1,400&family=Tenor+Sans&display=swap" rel="stylesheet">
     
-    <link rel="stylesheet" href="/static/styles.css?v=5" />
+    <link rel="stylesheet" href="/static/styles.css?v=6" />
   </head>
   <body>
 
@@ -49,6 +49,13 @@
               <button id="refreshBtn" class="btn small outline">Refresh</button>
               <button id="downloadCsvBtn" class="btn small outline">Export CSV</button>
             </div>
+          </div>
+
+          <div class="data-status" id="dataStatus" role="status" aria-live="polite">
+            <span class="data-status__population" id="populationStatus">Loading complete catalogue…</span>
+            <span>Source <strong id="sourceStatus">—</strong></span>
+            <span>Latest period <strong id="periodStatus">—</strong></span>
+            <span>Updated <strong id="freshnessStatus">—</strong></span>
           </div>
 
           <!-- Stats Row -->
@@ -218,7 +225,8 @@
            </div>
 
            <div class="insight-block">
-             <h3>Origin</h3>
+	             <h3>Supplier mix</h3>
+	             <p id="partnerMeta" class="meta-serif">Partner data unavailable</p>
              <div class="chart-donut-small">
                <canvas id="partnerChart"></canvas>
              </div>
@@ -248,6 +256,6 @@
     <div id="toast" class="toast" role="status" aria-live="polite" hidden></div>
 
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-    <script src="/static/app.js?v=6"></script>
+    <script src="/static/app.js?v=8"></script>
   </body>
 </html>

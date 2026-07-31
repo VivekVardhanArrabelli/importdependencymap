@@ -142,6 +142,8 @@ def load(conn, records: Iterable[Record]) -> Tuple[int, int]:
             fx_rate=record.fx_rate,
             qty=record.qty,
             partner=record.partner_country,
+            source="dgcis",
+            is_aggregate=False,
         )
         monthly_rows += 1
     return len(products_seen), monthly_rows
