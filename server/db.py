@@ -241,7 +241,7 @@ def bulk_upsert_products(
             SET title = CASE
                     WHEN EXCLUDED.title IS NULL
                       OR btrim(EXCLUDED.title) = ''
-                      OR EXCLUDED.title LIKE 'HS %'
+                      OR EXCLUDED.title LIKE 'HS %%'
                     THEN products.title
                     ELSE EXCLUDED.title
                 END,
