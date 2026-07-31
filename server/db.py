@@ -51,6 +51,7 @@ def init_db(conn) -> None:
             description TEXT,
             sectors TEXT[] DEFAULT ARRAY[]::TEXT[],
             granularity INT DEFAULT 6,
+            catalog_active BOOLEAN NOT NULL DEFAULT true,
             capex_min NUMERIC,
             capex_max NUMERIC,
             created_at timestamptz DEFAULT now(),
@@ -177,6 +178,12 @@ def init_db(conn) -> None:
         # Ensure timestamp columns on products (for idempotency across schema evolutions)
         cur.execute("ALTER TABLE products ADD COLUMN IF NOT EXISTS created_at timestamptz DEFAULT now()")
         cur.execute("ALTER TABLE products ADD COLUMN IF NOT EXISTS updated_at timestamptz DEFAULT now()")
+        cur.execute(
+            "ALTER TABLE products ADD COLUMN IF NOT EXISTS catalog_active BOOLEAN DEFAULT true"
+        )
+        cur.execute("UPDATE products SET catalog_active = true WHERE catalog_active IS NULL")
+        cur.execute("ALTER TABLE products ALTER COLUMN catalog_active SET DEFAULT true")
+        cur.execute("ALTER TABLE products ALTER COLUMN catalog_active SET NOT NULL")
         # Similarly for other tables if needed (e.g., baseline_imports already has updated_at in CREATE)
         cur.execute("ALTER TABLE baseline_imports ADD COLUMN IF NOT EXISTS updated_at timestamptz DEFAULT now()")
         cur.execute("ALTER TABLE import_progress ADD COLUMN IF NOT EXISTS last_updated timestamptz DEFAULT now()")
@@ -278,6 +285,25 @@ def bulk_upsert_products(
     return len(values)
 
 
+def replace_product_catalog_membership(conn, hs_codes: Sequence[str]) -> int:
+    """Mark only the supplied HS6 codes as members of the current catalogue."""
+
+    codes = sorted({str(code).strip() for code in hs_codes if str(code).strip()})
+    if not codes:
+        raise ValueError("Current product catalogue cannot be empty")
+    with conn.cursor() as cur:
+        cur.execute(
+            """
+            UPDATE products
+            SET catalog_active = (hs_code = ANY(%s))
+            WHERE granularity = 6
+              AND hs_code ~ '^[0-9]{6}$'
+            """,
+            (codes,),
+        )
+        return int(cur.rowcount)
+
+
 def fetch_product_catalog(conn) -> List[Dict[str, Any]]:
     with conn.cursor(cursor_factory=RealDictCursor) as cur:
         cur.execute(
@@ -285,6 +311,7 @@ def fetch_product_catalog(conn) -> List[Dict[str, Any]]:
             SELECT hs_code, title, description, sectors
             FROM products
             WHERE granularity = 6
+              AND catalog_active = true
               AND hs_code ~ '^[0-9]{6}$'
             ORDER BY hs_code
             """

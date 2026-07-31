@@ -543,7 +543,7 @@ def list_products(
         *from_parts,
     ]
     params: List[Any] = []
-    conditions: List[str] = []
+    conditions: List[str] = ["p.catalog_active = true"]
 
     search_term = (q or "").strip()
     if search_term:

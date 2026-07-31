@@ -441,7 +441,12 @@ def sync_product_catalog(
         )
         for item in catalogue
     ]
-    return db.bulk_upsert_products(conn, rows)
+    synced = db.bulk_upsert_products(conn, rows)
+    db.replace_product_catalog_membership(
+        conn,
+        [item.hs_code for item in catalogue],
+    )
+    return synced
 
 
 def _leaf_row(row: Dict) -> bool:
