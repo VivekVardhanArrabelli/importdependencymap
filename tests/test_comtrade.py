@@ -63,6 +63,23 @@ class ComtradeEndpointContractTest(unittest.TestCase):
             "https://comtradeapi.un.org/data/v1/get/C/M/HS",
         )
 
+    def test_keyed_endpoint_ignores_legacy_public_base(self):
+        with patch.dict(
+            os.environ,
+            {
+                "COMTRADE_KEY": "test-key",
+                "COMTRADE_BASE": "https://comtradeapi.un.org/public/v1",
+            },
+            clear=True,
+        ):
+            parts = comtrade._build_path_segments("C", "M", "HS")
+            endpoint = comtrade._resolve_endpoint(*parts)
+
+        self.assertEqual(
+            endpoint,
+            "https://comtradeapi.un.org/data/v1/get/C/M/HS",
+        )
+
 
 class ComtradeCatalogContractTest(unittest.TestCase):
     def setUp(self):

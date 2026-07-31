@@ -135,9 +135,10 @@ def _base_url() -> str:
     configured = (os.getenv("COMTRADE_BASE") or "").strip()
     if configured:
         lowered = configured.lower()
-        if _api_key() and "/public/v1/preview" in lowered:
+        if _api_key() and "/public/v1" in lowered:
             LOGGER.info(
-                "COMTRADE_KEY is configured; using the keyed data endpoint instead of preview"
+                "COMTRADE_KEY is configured; using the keyed data endpoint "
+                "instead of the legacy public base"
             )
             return KEYED_BASE
         if not _api_key() and "/data/v1" in lowered:
