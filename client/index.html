@@ -3,20 +3,21 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <meta name="theme-color" content="#f4f1ea" />
+    <meta name="theme-color" content="#f7f3eb" />
     <meta
       name="description"
       content="Reviewed ways to build businesses around products India imports, matched to your money, time, buyers, and operating edge."
     />
     <title>Build India — Find what your capital can prove</title>
-    <link rel="stylesheet" href="/static/styles.css?v=20260731-7" />
+    <link rel="stylesheet" href="/static/styles.css?v=20260731-9" />
   </head>
   <body>
     <a class="skip-link" href="#main-content">Skip to opportunities</a>
 
     <header class="site-header">
       <a class="wordmark" href="#discover" data-action="navigate" data-view="discover" aria-label="Build India home">
-        <span>BUILD</span><i>/</i><span>INDIA</span>
+        <span class="wordmark-orbit" aria-hidden="true"><i></i></span>
+        <span>BUILD</span><b>/</b><span>INDIA</span>
       </a>
 
       <nav class="primary-nav" aria-label="Primary navigation">
@@ -49,8 +50,9 @@
             </p>
           </div>
           <div class="coverage-note" aria-label="Data coverage">
-            <div><strong id="heroProductCount">—</strong><span>customs categories checked</span></div>
-            <div><strong id="heroLatestPeriod">—</strong><span>latest trade period</span></div>
+            <span class="coverage-orbit" aria-hidden="true"><i></i><i></i><i></i></span>
+            <div><strong id="heroProductCount">—</strong><span>categories mapped</span></div>
+            <div><strong id="heroLatestPeriod">—</strong><span>trade evidence through</span></div>
             <span id="heroMarketValue" hidden>—</span>
           </div>
         </section>
@@ -68,12 +70,12 @@
           <header class="spotlight-heading">
             <div>
               <p class="section-kicker">Strongest opening for your plan</p>
-              <h2 id="spotlight-title">A business worth a closer look</h2>
+              <h2 class="sr-only" id="spotlight-title">A business worth a closer look</h2>
             </div>
             <p>Trade records show the category. The route, cost, and timing are screening estimates to verify.</p>
           </header>
           <div class="lead-opportunity" id="leadOpportunity">
-            <div class="lead-loading" aria-hidden="true"></div>
+            <div class="lead-loading" aria-hidden="true"><span></span><span></span><span></span><span></span></div>
           </div>
         </section>
 
@@ -120,7 +122,7 @@
           </div>
 
           <div class="results-heading">
-            <p id="resultsMeta">Checking every current HS6 category…</p>
+            <p id="resultsMeta" aria-live="polite">Checking every current HS6 category…</p>
             <div class="evidence-key" aria-label="Evidence types">
               <span><i class="key-dot key-dot--record"></i>Trade record</span>
               <span><i class="key-dot key-dot--estimate"></i>Screening estimate</span>
@@ -129,9 +131,9 @@
           </div>
 
           <div class="opportunity-list" id="opportunityGrid">
-            <article class="loading-card" aria-hidden="true"></article>
-            <article class="loading-card" aria-hidden="true"></article>
-            <article class="loading-card" aria-hidden="true"></article>
+            <article class="loading-card" aria-hidden="true"><i></i><span></span><span></span></article>
+            <article class="loading-card" aria-hidden="true"><i></i><span></span><span></span></article>
+            <article class="loading-card" aria-hidden="true"><i></i><span></span><span></span></article>
           </div>
           <div class="load-more-wrap">
             <button class="quiet-button quiet-button--large" id="loadMoreBtn" type="button" hidden>Show more</button>
@@ -312,7 +314,7 @@
 
         <select id="captureSelect" aria-hidden="true" tabindex="-1" hidden><option value="0.1">0.1%</option><option value="0.5">0.5%</option><option value="1" selected>1%</option><option value="2">2%</option><option value="5">5%</option></select>
         <div class="profile-apply">
-          <p>Change your buyer access or operating strengths and the ranking will move—not just the score.</p>
+          <p id="profilePreview" aria-live="polite"><strong>Your current lead stays in place.</strong><span>Change your buyer access or operating strengths to move the ranking.</span></p>
           <button class="primary-button" type="submit">Show me what I could test <span aria-hidden="true">→</span></button>
         </div>
       </form>
@@ -327,9 +329,15 @@
       <div class="dossier-scroll" id="dossierContent"><div class="dossier-loading" role="status"><span></span><strong>Assembling the reality check…</strong></div></div>
     </section>
 
+    <aside class="compare-tray" id="compareTray" aria-live="polite" hidden>
+      <span class="compare-tray__mark" aria-hidden="true">★</span>
+      <p><strong id="compareTrayTitle">1 route saved</strong><span id="compareTrayCopy">Add one more to compare.</span></p>
+      <button type="button" data-action="navigate" data-view="portfolio">View saved</button>
+    </aside>
+
     <div class="toast" id="toast" role="status" aria-live="polite" hidden></div>
 
-    <script src="/static/opportunity-model.js?v=20260731-2"></script>
-    <script src="/static/app.js?v=20260731-4"></script>
+    <script src="/static/opportunity-model.js?v=20260731-3"></script>
+    <script src="/static/app.js?v=20260731-6"></script>
   </body>
 </html>

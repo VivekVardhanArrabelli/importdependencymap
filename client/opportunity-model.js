@@ -607,12 +607,9 @@
     return opportunity.combinedFit;
   }
 
-  function rankOpportunities(products, profileInput, lensInput, contextInput, routesInput) {
-    const profile = sanitizeProfile(profileInput);
+  function sortOpportunities(opportunities, lensInput) {
     const lens = VALID_LENSES.has(lensInput) ? lensInput : 'fit';
-    const context = contextInput || createMarketContext(products);
-    return (Array.isArray(products) ? products : [])
-      .map((product) => deriveOpportunity(product, profile, context, routesInput))
+    return (Array.isArray(opportunities) ? opportunities.slice() : [])
       .sort((left, right) => {
         if (lens === 'fit' && right.fitTierRank !== left.fitTierRank) return right.fitTierRank - left.fitTierRank;
         if (lens === 'rising') {
@@ -627,6 +624,14 @@
         if (valueDifference !== 0) return valueDifference;
         return String(left.product && left.product.hs_code || '').localeCompare(String(right.product && right.product.hs_code || ''));
       });
+  }
+
+  function rankOpportunities(products, profileInput, lensInput, contextInput, routesInput) {
+    const profile = sanitizeProfile(profileInput);
+    const context = contextInput || createMarketContext(products);
+    const opportunities = (Array.isArray(products) ? products : [])
+      .map((product) => deriveOpportunity(product, profile, context, routesInput));
+    return sortOpportunities(opportunities, lensInput);
   }
 
   function scenarioValue(importValueInput, capturePctInput) {
@@ -709,6 +714,7 @@
     strengthLabel,
     deriveOpportunity,
     rankOpportunities,
+    sortOpportunities,
     scoreForLens,
     scenarioValue,
     spreadsheetSafeText

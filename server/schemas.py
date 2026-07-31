@@ -12,7 +12,7 @@ class ProductFilter(BaseModel):
     min_capex: Optional[float] = Field(default=None, ge=0)
     max_capex: Optional[float] = Field(default=None, ge=0)
     sort: str = Field(default="opportunity")
-    limit: int = Field(default=100, ge=1, le=500)
+    limit: int = Field(default=100, ge=1, le=6000)
 
 
 class DomesticCapabilityPayload(BaseModel):

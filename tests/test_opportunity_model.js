@@ -108,6 +108,26 @@ function rankedCodes(products, profile, lens, routes) {
     .map((opportunity) => opportunity.product.hs_code);
 }
 
+test('lens changes sort a shallow copy without re-deriving opportunities', () => {
+  const products = [
+    product('853710', 'Electrical control panels', { last_12m_value_usd: 10_000_000 }),
+    product('850300', 'Motor parts', { last_12m_value_usd: 1_000_000_000 })
+  ];
+  const context = Model.createMarketContext(products);
+  const opportunities = products.map((item) => Model.deriveOpportunity(
+    item,
+    LOW_CAPITAL_PROFILE,
+    context,
+    PANEL_ROUTES
+  ));
+  const originalOrder = opportunities.map((item) => item.product.hs_code);
+  const national = Model.sortOpportunities(opportunities, 'national');
+
+  assert.deepEqual(opportunities.map((item) => item.product.hs_code), originalOrder);
+  assert.deepEqual(national.map((item) => item.product.hs_code), ['850300', '853710']);
+  assert.equal(national.find((item) => item.product.hs_code === '853710'), opportunities[0]);
+});
+
 test('profile defaults describe the ₹25 lakh, 12-month assembly mandate', () => {
   assert.deepEqual(Model.sanitizeProfile(), {
     capitalInr: 2_500_000,

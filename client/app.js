@@ -3,10 +3,12 @@
 const Model = window.OpportunityModel;
 if (!Model) throw new Error('Opportunity model failed to load');
 
-const PRODUCT_PAGE_SIZE = 500;
+const PRODUCT_PAGE_SIZE = 6000;
 const MAX_PRODUCT_PAGES = 1000;
 const RESULT_INCREMENT = 9;
 const EVIDENCE_CACHE_MAX_AGE_MS = 24 * 60 * 60 * 1000;
+const DETAIL_CACHE_MAX_AGE_MS = 15 * 60 * 1000;
+const DETAIL_CACHE_MAX_ITEMS = 24;
 const STORAGE_KEYS = {
   profile: 'bfi_mandate_v3',
   shortlist: 'bfi_capital_plan_v2',
@@ -63,7 +65,10 @@ const state = {
   routes: [],
   routeVersion: null,
   marketContext: null,
+  derived: [],
+  deriveCacheKey: null,
   ranked: [],
+  rankCacheKey: null,
   filtered: [],
   metadata: {
     total: 0,
@@ -72,6 +77,7 @@ const state = {
     lastUpdated: null
   },
   profile: Model.sanitizeProfile(restoreJSON(STORAGE_KEYS.profile, {})),
+  profileDraft: null,
   filters: {
     query: '',
     sector: 'all',
@@ -82,6 +88,7 @@ const state = {
   allocations: sanitizeNumberMap(restoreJSON(STORAGE_KEYS.allocations, {})),
   notes: sanitizeNoteMap(restoreJSON(STORAGE_KEYS.notes, {})),
   detailEvidence: sanitizeEvidenceMap(restoreJSON(STORAGE_KEYS.evidence, {})),
+  detailCache: new Map(),
   selected: null,
   view: 'discover',
   loading: false,
@@ -93,7 +100,11 @@ const state = {
   profileLastFocusedElement: null,
   toastTimer: null,
   toastRequestId: 0,
-  searchTimer: null
+  searchTimer: null,
+  profilePreviewTimer: null,
+  profileCloseTimer: null,
+  dossierCloseTimer: null,
+  portfolioDirty: false
 };
 
 document.addEventListener('DOMContentLoaded', initialize);
@@ -205,7 +216,36 @@ function handleKeydown(event) {
   const dossier = document.getElementById('dossierDialog');
   const profile = document.getElementById('profileDialog');
   const dialog = !dossier.hidden ? dossier : !profile.hidden ? profile : null;
-  if (!dialog) return;
+  if (!dialog) {
+    if (state.view === 'discover' && event.key === '/' && !event.metaKey && !event.ctrlKey && !event.altKey
+      && !event.target.matches('input, textarea, select, [contenteditable="true"]')) {
+      event.preventDefault();
+      document.getElementById('searchInput').focus();
+      return;
+    }
+    if (state.view === 'discover' && event.key === 'Escape'
+      && (state.filters.query || document.activeElement.id === 'searchInput')) {
+      event.preventDefault();
+      clearTimeout(state.searchTimer);
+      const search = document.getElementById('searchInput');
+      search.value = '';
+      state.filters.query = '';
+      state.filters.visibleCount = RESULT_INCREMENT;
+      renderOpportunityResults();
+      search.focus();
+      return;
+    }
+    if ((event.key === 'ArrowLeft' || event.key === 'ArrowRight') && event.target.matches('.lens-tab')) {
+      event.preventDefault();
+      const tabs = [...document.querySelectorAll('.lens-tab')];
+      const current = tabs.indexOf(event.target);
+      const direction = event.key === 'ArrowRight' ? 1 : -1;
+      const next = tabs[(current + direction + tabs.length) % tabs.length];
+      next.focus();
+      setLens(next.dataset.lens);
+    }
+    return;
+  }
   if (event.key === 'Escape') {
     event.preventDefault();
     if (!dossier.hidden) closeDossier();
@@ -234,21 +274,33 @@ function handleKeydown(event) {
 
 function handleMandateSubmit(event) {
   event.preventDefault();
-  readProfileFromForm();
+  state.profile = state.profileDraft || profileFromForm();
+  state.profileDraft = null;
+  persistProfile();
+  syncProfileControls();
+  state.deriveCacheKey = null;
+  state.rankCacheKey = null;
   renderDiscovery();
+  if (state.view === 'portfolio') renderPortfolio();
   closeProfileEditor();
   document.getElementById('opportunityMap').scrollIntoView({ behavior: reducedMotion() ? 'auto' : 'smooth', block: 'start' });
   showToast('Ranking rebuilt for what you can bring');
 }
 
 function handleMandateChange() {
-  readProfileFromForm();
-  renderDiscovery();
-  if (state.view === 'portfolio') renderPortfolio();
+  state.profileDraft = profileFromForm();
+  clearTimeout(state.profilePreviewTimer);
+  state.profilePreviewTimer = setTimeout(renderProfilePreview, 120);
 }
 
 function openProfileEditor(trigger) {
   const dialog = document.getElementById('profileDialog');
+  clearTimeout(state.profileCloseTimer);
+  dialog.classList.remove('is-closing');
+  document.getElementById('profileBackdrop').classList.remove('is-closing');
+  state.profileDraft = Model.sanitizeProfile(state.profile);
+  syncProfileControls(state.profileDraft);
+  renderProfilePreview();
   state.profileLastFocusedElement = trigger || document.activeElement;
   document.getElementById('profileBackdrop').hidden = false;
   dialog.hidden = false;
@@ -258,14 +310,27 @@ function openProfileEditor(trigger) {
 
 function closeProfileEditor() {
   const dialog = document.getElementById('profileDialog');
-  if (dialog.hidden) return;
-  dialog.hidden = true;
-  document.getElementById('profileBackdrop').hidden = true;
-  document.body.classList.remove('profile-open');
-  if (state.profileLastFocusedElement && document.contains(state.profileLastFocusedElement)) {
-    state.profileLastFocusedElement.focus();
-  }
-  state.profileLastFocusedElement = null;
+  if (dialog.hidden || dialog.classList.contains('is-closing')) return;
+  clearTimeout(state.profilePreviewTimer);
+  state.profileDraft = null;
+  syncProfileControls(state.profile);
+  const backdrop = document.getElementById('profileBackdrop');
+  const finish = () => {
+    state.profileCloseTimer = null;
+    dialog.hidden = true;
+    backdrop.hidden = true;
+    dialog.classList.remove('is-closing');
+    backdrop.classList.remove('is-closing');
+    document.body.classList.remove('profile-open');
+    if (state.profileLastFocusedElement && document.contains(state.profileLastFocusedElement)) {
+      state.profileLastFocusedElement.focus();
+    }
+    state.profileLastFocusedElement = null;
+  };
+  dialog.classList.add('is-closing');
+  backdrop.classList.add('is-closing');
+  if (reducedMotion()) finish();
+  else state.profileCloseTimer = setTimeout(finish, 180);
 }
 
 function handleSearchInput(event) {
@@ -287,20 +352,35 @@ function handleSectorFilter(event) {
 function handleCaptureChange(event) {
   state.profile.capturePct = Model.clamp(Number(event.currentTarget.value), 0.1, 5);
   persistProfile();
+  state.deriveCacheKey = null;
+  state.rankCacheKey = null;
   renderDiscovery();
 }
 
 function handleLoadMore() {
+  const previousCount = Math.min(state.filters.visibleCount, state.filtered.length);
   state.filters.visibleCount += RESULT_INCREMENT;
-  renderOpportunityResults();
+  const nextCount = Math.min(state.filters.visibleCount, state.filtered.length);
+  const grid = document.getElementById('opportunityGrid');
+  const fragment = document.createRange().createContextualFragment(
+    state.filtered.slice(Math.max(1, previousCount), nextCount)
+      .map((opportunity, index) => opportunityCard(opportunity, previousCount + index))
+      .join('')
+  );
+  grid.appendChild(fragment);
+  updateLoadMoreControl(nextCount);
+  document.getElementById('resultsMeta').textContent = `${numberFormatter.format(nextCount)} of ${numberFormatter.format(state.filtered.length)} opportunities shown`;
   const cards = document.querySelectorAll('.opportunity-card');
-  const target = cards[Math.max(0, cards.length - RESULT_INCREMENT)];
-  if (target) target.focus({ preventScroll: true });
+  const target = cards[Math.max(0, previousCount - 1)];
+  if (target) {
+    target.focus();
+    target.scrollIntoView({ block: 'nearest', behavior: reducedMotion() ? 'auto' : 'smooth' });
+  }
 }
 
-function readProfileFromForm() {
+function profileFromForm() {
   const form = new FormData(document.getElementById('mandateForm'));
-  state.profile = Model.sanitizeProfile({
+  return Model.sanitizeProfile({
     capitalInr: Number(form.get('capital')),
     capitalMultiplier: Number(form.get('capitalMultiplier')),
     role: form.get('role'),
@@ -311,6 +391,10 @@ function readProfileFromForm() {
     sectors: form.getAll('sector'),
     capturePct: Number(document.getElementById('captureSelect').value)
   });
+}
+
+function readProfileFromForm() {
+  state.profile = profileFromForm();
   persistProfile();
   syncProfileControls();
 }
@@ -319,8 +403,7 @@ function persistProfile() {
   persistJSON(STORAGE_KEYS.profile, state.profile);
 }
 
-function syncProfileControls() {
-  const profile = state.profile;
+function syncProfileControls(profile = state.profile) {
   const role = document.querySelector(`input[name="role"][value="${cssEscape(profile.role)}"]`);
   const capital = document.querySelector(`input[name="capital"][value="${cssEscape(String(profile.capitalInr))}"]`);
   if (role) role.checked = true;
@@ -336,6 +419,44 @@ function syncProfileControls() {
     input.checked = profile.sectors.includes(input.value);
   });
   syncCaptureControl(profile.capturePct);
+}
+
+function renderProfilePreview() {
+  const preview = document.getElementById('profilePreview');
+  if (!preview) return;
+  const draft = state.profileDraft || state.profile;
+  if (!state.products.length || !state.marketContext) {
+    preview.innerHTML = '<strong>Your ranking will adapt.</strong><span>Money, timing, buyers, and operating strengths all change the order.</span>';
+    return;
+  }
+  const reviewedCodes = new Set(state.routes.map((route) => String(route.hs_code)));
+  const reviewedProducts = state.products.filter((product) => reviewedCodes.has(String(product.hs_code)));
+  const draftRanking = Model.rankOpportunities(
+    reviewedProducts,
+    draft,
+    state.filters.lens,
+    state.marketContext,
+    state.routes
+  );
+  const lead = draftRanking.find((opportunity) => (
+    opportunity.importValue !== null
+    && opportunity.importValue > 0
+    && opportunity.classification.id !== 'controlled'
+  ));
+  const currentLead = state.ranked.find((opportunity) => (
+    opportunity.importValue !== null
+    && opportunity.importValue > 0
+    && opportunity.classification.id !== 'controlled'
+    && opportunity.route.confidence === 'curated_model'
+  ));
+  if (!lead) {
+    preview.innerHTML = '<strong>No reviewed route fits yet.</strong><span>Try a longer deadline, broader entry model, or stronger buyer access.</span>';
+    return;
+  }
+  const changed = !currentLead || lead.product.hs_code !== currentLead.product.hs_code;
+  preview.innerHTML = changed
+    ? `<strong>Top reviewed route becomes ${escapeHTML(lead.shortTitle)}.</strong><span>${escapeHTML(fitReasonForProfile(lead, draft))}</span>`
+    : `<strong>${escapeHTML(lead.shortTitle)} remains the top reviewed route.</strong><span>${escapeHTML(fitReasonForProfile(lead, draft))}</span>`;
 }
 
 function syncCaptureControl(value, select = document.getElementById('captureSelect')) {
@@ -369,6 +490,7 @@ function switchView(view, options = {}) {
   });
   if (normalized === 'portfolio') renderPortfolio();
   if (normalized === 'method') renderMethodCoverage();
+  updateCompareTray();
   if (options.updateHash !== false) history.replaceState(null, '', `#${normalized}`);
   if (options.focus !== false) window.scrollTo({ top: 0, behavior: reducedMotion() ? 'auto' : 'smooth' });
 }
@@ -413,6 +535,9 @@ async function loadProducts(force = false) {
       latestPeriod: data.latest_period,
       lastUpdated: data.last_updated
     };
+    state.deriveCacheKey = null;
+    state.rankCacheKey = null;
+    state.detailCache.clear();
     pruneDetailEvidence();
     state.loading = false;
     renderDataStatus();
@@ -523,11 +648,11 @@ function renderLoadingState() {
   document.getElementById('heroProductCount').textContent = '—';
   document.getElementById('heroLatestPeriod').textContent = '—';
   document.getElementById('resultsMeta').textContent = 'Loading trade demand across every current HS6 market…';
-  document.getElementById('leadOpportunity').innerHTML = '<div class="lead-loading" aria-hidden="true"></div>';
+  document.getElementById('leadOpportunity').innerHTML = '<div class="lead-loading" aria-hidden="true"><span></span><span></span><span></span><span></span></div>';
   document.getElementById('opportunityGrid').innerHTML = `
-    <article class="loading-card" aria-hidden="true"></article>
-    <article class="loading-card" aria-hidden="true"></article>
-    <article class="loading-card" aria-hidden="true"></article>
+    <article class="loading-card" aria-hidden="true"><i></i><span></span><span></span></article>
+    <article class="loading-card" aria-hidden="true"><i></i><span></span><span></span></article>
+    <article class="loading-card" aria-hidden="true"><i></i><span></span><span></span></article>
   `;
   document.getElementById('loadMoreBtn').hidden = true;
 }
@@ -610,13 +735,24 @@ function renderMandateSummary() {
 
 function renderOpportunityResults() {
   if (state.loading || !state.products.length) return;
-  state.ranked = Model.rankOpportunities(
-    state.products,
+  const deriveCacheKey = JSON.stringify([
     state.profile,
-    state.filters.lens,
-    state.marketContext,
-    state.routes
-  );
+    state.metadata.lastUpdated,
+    state.routeVersion,
+    state.products.length
+  ]);
+  if (state.deriveCacheKey !== deriveCacheKey) {
+    state.derived = state.products.map((product) => (
+      Model.deriveOpportunity(product, state.profile, state.marketContext, state.routes)
+    ));
+    state.deriveCacheKey = deriveCacheKey;
+    state.rankCacheKey = null;
+  }
+  const rankCacheKey = `${state.deriveCacheKey}|${state.filters.lens}`;
+  if (state.rankCacheKey !== rankCacheKey) {
+    state.ranked = Model.sortOpportunities(state.derived, state.filters.lens);
+    state.rankCacheKey = rankCacheKey;
+  }
   const query = state.filters.query;
   const sector = state.filters.sector;
   state.filtered = state.ranked.filter((opportunity) => {
@@ -657,10 +793,14 @@ function renderOpportunityResults() {
   document.getElementById('resultsMeta').textContent = state.filters.query
     ? `${numberFormatter.format(state.filtered.length)} matching categories · reviewed routes rank ahead of unresolved trade signals`
     : `${numberFormatter.format(state.routes.length)} reviewed routes ranked for you · other import categories remain searchable as trade signals`;
+  updateLoadMoreControl(visible.length);
+}
+
+function updateLoadMoreControl(visibleLength) {
   const loadMore = document.getElementById('loadMoreBtn');
-  loadMore.hidden = visible.length >= state.filtered.length;
+  loadMore.hidden = visibleLength >= state.filtered.length;
   if (!loadMore.hidden) {
-    loadMore.textContent = `Show ${Math.min(RESULT_INCREMENT, state.filtered.length - visible.length)} more`;
+    loadMore.textContent = `Show ${Math.min(RESULT_INCREMENT, state.filtered.length - visibleLength)} more`;
   }
 }
 
@@ -675,27 +815,31 @@ function humanVerdict(opportunity) {
 }
 
 function fitReason(opportunity) {
+  return fitReasonForProfile(opportunity, state.profile);
+}
+
+function fitReasonForProfile(opportunity, profile) {
   const route = opportunity.route;
   const reasons = [];
   const minimumMonths = Model.finiteNumber(route.months_min);
   const minimumCapital = Model.finiteNumber(route.capital_min_inr);
   if (minimumMonths !== null) {
-    reasons.push(minimumMonths <= state.profile.horizonMonths
-      ? `Can reach paid proof inside your ${state.profile.horizonMonths}-month deadline`
-      : `Needs at least ${minimumMonths} months; your deadline is ${state.profile.horizonMonths}`);
+    reasons.push(minimumMonths <= profile.horizonMonths
+      ? `Can reach paid proof inside your ${profile.horizonMonths}-month deadline`
+      : `Needs at least ${minimumMonths} months; your deadline is ${profile.horizonMonths}`);
   }
   if (minimumCapital !== null) {
-    const gap = minimumCapital - opportunity.projectCapitalInr;
+    const gap = minimumCapital - Model.projectCapital(profile);
     reasons.push(gap <= 0
       ? 'Low-end screening estimate fits your funding plan'
       : `Low-end estimate is ${formatInr(gap)} above your funding plan`);
   }
   const requiredStrengths = Array.isArray(route.required_strengths) ? route.required_strengths : [];
-  const missingStrengths = requiredStrengths.filter((strength) => !state.profile.strengths.includes(strength));
+  const missingStrengths = requiredStrengths.filter((strength) => !profile.strengths.includes(strength));
   if (missingStrengths.length && reasons.length < 2) {
     reasons.push(`Still needs ${missingStrengths.slice(0, 2).map(Model.strengthLabel).join(' and ').toLowerCase()}`);
   }
-  if (state.profile.buyerAccess === 'none' && Array.isArray(route.buyer_types) && route.buyer_types.length && reasons.length < 2) {
+  if (profile.buyerAccess === 'none' && Array.isArray(route.buyer_types) && route.buyer_types.length && reasons.length < 2) {
     reasons.push('Buyer access is still unproven');
   }
   return reasons.length ? reasons.slice(0, 2).join('. ') + '.' : opportunity.fitVerdict.detail;
@@ -705,10 +849,17 @@ function leadOpportunity(opportunity) {
   const product = opportunity.product;
   const hsCode = escapeHTML(product.hs_code);
   const saved = isSaved(product.hs_code);
-  const sector = titleCase(opportunity.sectors[0] || 'unclassified');
+  const sectorId = opportunity.sectors[0] || 'unclassified';
+  const sector = titleCase(sectorId);
   const routeStatus = opportunity.route.confidence === 'curated_model' ? 'Reviewed route' : 'Trade signal only';
+  const minimumCapital = Model.finiteNumber(opportunity.route.capital_min_inr);
+  const availableCapital = Model.finiteNumber(opportunity.projectCapitalInr) || 0;
+  const scaleCapital = Math.max(minimumCapital || 0, availableCapital, 1);
+  const availablePct = Math.min(100, Math.max(4, availableCapital / scaleCapital * 100));
+  const minimumPct = minimumCapital === null ? 100 : Math.min(100, Math.max(4, minimumCapital / scaleCapital * 100));
+  const trendMagnitude = Math.min(100, Math.max(8, Math.abs(Model.finiteNumber(opportunity.reductionPct) || 0) * 100));
   return `
-    <article class="lead-card">
+    <article class="lead-card lead-card--${escapeHTML(sectorId)}">
       <div class="lead-card__main">
         <span class="lead-number">01</span>
         <div class="lead-card__content">
@@ -719,10 +870,21 @@ function leadOpportunity(opportunity) {
           </div>
           <h3>${escapeHTML(opportunity.shortTitle)}</h3>
           <p class="lead-wedge">${escapeHTML(opportunity.route.wedge)}</p>
-          <div class="lead-fit"><strong>Why it ranked here</strong><span>${escapeHTML(fitReason(opportunity))}</span></div>
+          <div class="lead-mobile-summary">
+            <span>Entry<strong>${escapeHTML(Model.capitalRangeLabel(opportunity.route))}</strong></span>
+            <span>Paid proof<strong>${escapeHTML(Model.monthRangeLabel(opportunity.route))}</strong></span>
+            <span>Difficulty<strong>${opportunity.complexity.overall}/5</strong></span>
+          </div>
+          <div class="lead-fit">
+            <div><strong>Why it ranked here</strong><span>${escapeHTML(fitReason(opportunity))}</span></div>
+            <div class="capital-fit" aria-label="Your available capital compared with the minimum screening estimate">
+              <div class="capital-fit__track" style="--available:${availablePct}%; --minimum:${minimumPct}%"><span></span><i></i></div>
+              <div><span>Your reach <strong>${formatInr(availableCapital)}</strong></span><span>Minimum <strong>${minimumCapital === null ? 'Unverified' : formatInr(minimumCapital)}</strong></span></div>
+            </div>
+          </div>
           <div class="lead-actions">
-            <button class="primary-button" type="button" data-action="open-dossier" data-hs-code="${hsCode}">See the full reality check <span aria-hidden="true">→</span></button>
-            <button class="lead-save${saved ? ' is-saved' : ''}" type="button" data-action="toggle-save" data-hs-code="${hsCode}" aria-pressed="${saved}">${saved ? 'Saved to compare' : 'Save to compare'}</button>
+            <button class="primary-button" type="button" data-action="open-dossier" data-hs-code="${hsCode}"><span class="cta-wide">See the full reality check</span><span class="cta-mobile">Open full brief</span> <span aria-hidden="true">→</span></button>
+            <button class="lead-save${saved ? ' is-saved' : ''}" type="button" data-action="toggle-save" data-save-style="lead" data-hs-code="${hsCode}" aria-pressed="${saved}"><span aria-hidden="true">${saved ? '★' : '☆'}</span> ${saved ? 'Saved to compare' : 'Save to compare'}</button>
           </div>
         </div>
       </div>
@@ -731,12 +893,13 @@ function leadOpportunity(opportunity) {
           <span class="lead-trade-label">Trade record · whole HS6 category</span>
           <strong>${formatUsdCompact(opportunity.importValue)}</strong>
           <p>${escapeHTML(Model.trendNarrative(opportunity.reductionPct))}</p>
+          <div class="trend-signal" aria-hidden="true"><span style="width:${trendMagnitude}%"></span></div>
           <small>This proves imports exist. It is not demand for ${escapeHTML(opportunity.shortTitle.toLowerCase())}, market size, or projected revenue.</small>
         </div>
         <div class="lead-facts">
           <div><span>Screening estimate</span><strong>${escapeHTML(Model.capitalRangeLabel(opportunity.route))}</strong></div>
           <div><span>Paid proof</span><strong>${escapeHTML(Model.monthRangeLabel(opportunity.route))}</strong></div>
-          <div><span>Startup complexity</span><strong>${escapeHTML(opportunity.complexity.label)} · ${opportunity.complexity.overall}/5</strong></div>
+          <div><span>Startup complexity</span><strong>${escapeHTML(opportunity.complexity.label)}</strong><div class="complexity-dots" aria-hidden="true">${renderComplexityDots(opportunity.complexity.overall)}</div></div>
           <div><span>Likely first buyer</span><strong>${escapeHTML(opportunity.route.buyer)}</strong></div>
         </div>
       </aside>
@@ -748,6 +911,7 @@ function opportunityCard(opportunity, index) {
   const product = opportunity.product;
   const hsCode = escapeHTML(product.hs_code);
   const sector = opportunity.sectors[0] || 'unclassified';
+  const saved = isSaved(product.hs_code);
   const structuralClass = opportunity.isStructural
     ? ' opportunity-card--structural'
     : ['controlled', 'strategic_asset', 'trade_signal'].includes(opportunity.classification.id)
@@ -755,7 +919,7 @@ function opportunityCard(opportunity, index) {
       : '';
 
   return `
-    <article class="opportunity-card${structuralClass}" tabindex="-1">
+    <article class="opportunity-card opportunity-card--${escapeHTML(sector)}${structuralClass}" tabindex="-1">
       <div class="card-rank">${String(index + 1).padStart(2, '0')}</div>
       <div class="card-identity">
         <div class="card-meta"><span>${escapeHTML(titleCase(sector))}</span><span>HS ${hsCode}</span></div>
@@ -769,7 +933,10 @@ function opportunityCard(opportunity, index) {
       <div class="card-metric card-metric--entry"><span>Modeled entry</span><strong>${escapeHTML(Model.capitalRangeLabel(opportunity.route))}</strong></div>
       <div class="card-metric card-metric--proof"><span>Paid proof</span><strong>${escapeHTML(Model.monthRangeLabel(opportunity.route))}</strong></div>
       <div class="card-metric card-metric--trade"><span>Trade record</span><strong>${formatUsdCompact(opportunity.importValue)}</strong><small>${escapeHTML(shortTrendLabel(opportunity.reductionPct))}</small></div>
-      <button class="card-open-icon" type="button" data-action="open-dossier" data-hs-code="${hsCode}" aria-label="See the full reality check for ${escapeHTML(opportunity.shortTitle)}">→</button>
+      <div class="card-actions">
+        <button class="card-save-icon${saved ? ' is-saved' : ''}" type="button" data-action="toggle-save" data-save-style="icon" data-hs-code="${hsCode}" aria-pressed="${saved}" aria-label="${saved ? 'Remove' : 'Save'} ${escapeHTML(opportunity.shortTitle)} ${saved ? 'from' : 'to'} compare"><span aria-hidden="true">${saved ? '★' : '☆'}</span></button>
+        <button class="card-open-icon" type="button" data-action="open-dossier" data-hs-code="${hsCode}" aria-label="See the full reality check for ${escapeHTML(opportunity.shortTitle)}">→</button>
+      </div>
       <div class="card-mobile-facts" aria-hidden="true">
         <span>Entry<strong>${escapeHTML(Model.capitalRangeLabel(opportunity.route))}</strong></span>
         <span>Proof<strong>${escapeHTML(Model.monthRangeLabel(opportunity.route))}</strong></span>
@@ -797,8 +964,12 @@ function toggleShortlist(hsCode) {
   }
   persistJSON(STORAGE_KEYS.shortlist, state.shortlist);
   updateSavedCount();
-  renderOpportunityResults();
-  renderPortfolio();
+  syncSavedButtons(normalized);
+  if (state.view === 'portfolio') {
+    const dossier = document.getElementById('dossierDialog');
+    if (state.selected && dossier && !dossier.hidden) state.portfolioDirty = true;
+    else renderPortfolio();
+  }
   updateDossierSaveButton();
 }
 
@@ -810,7 +981,7 @@ function removeFromPlan(hsCode) {
   persistJSON(STORAGE_KEYS.allocations, state.allocations);
   updateSavedCount();
   renderPortfolio();
-  renderOpportunityResults();
+  syncSavedButtons(normalized);
   showToast('Removed from compare');
 }
 
@@ -830,6 +1001,35 @@ function isSaved(hsCode) {
 
 function updateSavedCount() {
   document.getElementById('savedCount').textContent = numberFormatter.format(state.shortlist.length);
+  updateCompareTray();
+}
+
+function updateCompareTray() {
+  const tray = document.getElementById('compareTray');
+  if (!tray) return;
+  const count = state.shortlist.length;
+  tray.hidden = count === 0 || state.view !== 'discover';
+  if (!count) return;
+  document.getElementById('compareTrayTitle').textContent = `${numberFormatter.format(count)} ${count === 1 ? 'route' : 'routes'} saved`;
+  document.getElementById('compareTrayCopy').textContent = count === 1
+    ? 'Add one more to compare.'
+    : 'Ready for a side-by-side decision.';
+  tray.querySelector('button').textContent = count === 1 ? 'View saved' : `Compare ${numberFormatter.format(count)}`;
+}
+
+function syncSavedButtons(hsCode) {
+  const saved = isSaved(hsCode);
+  document.querySelectorAll(`[data-action="toggle-save"][data-hs-code="${cssEscape(hsCode)}"]`).forEach((button) => {
+    button.classList.toggle('is-saved', saved);
+    button.setAttribute('aria-pressed', String(saved));
+    if (button.dataset.saveStyle === 'lead') {
+      button.innerHTML = `<span aria-hidden="true">${saved ? '★' : '☆'}</span> ${saved ? 'Saved to compare' : 'Save to compare'}`;
+    } else if (button.dataset.saveStyle === 'icon') {
+      button.innerHTML = `<span aria-hidden="true">${saved ? '★' : '☆'}</span>`;
+      const title = button.closest('.opportunity-card')?.querySelector('h3')?.textContent || 'route';
+      button.setAttribute('aria-label', `${saved ? 'Remove' : 'Save'} ${title} ${saved ? 'from' : 'to'} compare`);
+    }
+  });
 }
 
 function renderPortfolio() {
@@ -1077,11 +1277,25 @@ async function openDossier(hsCode, trigger) {
 
   const requestId = ++state.detailRequestId;
   if (state.detailController) state.detailController.abort();
-  state.detailController = new AbortController();
+  state.detailController = null;
+  clearTimeout(state.dossierCloseTimer);
+  const dialog = document.getElementById('dossierDialog');
+  dialog.classList.remove('is-closing');
+  document.getElementById('dossierBackdrop').classList.remove('is-closing');
   state.lastFocusedElement = trigger || document.activeElement;
   const opportunity = Model.deriveOpportunity(product, state.profile, state.marketContext, state.routes);
   state.selected = { opportunity, detail: null, capability: null };
   showDossierShell(opportunity);
+
+  const cached = readDetailCache(hsCode);
+  if (cached) {
+    state.selected = { opportunity, detail: cached.detail, capability: cached.capability };
+    renderDossier();
+    renderPortfolioStats();
+    return;
+  }
+
+  state.detailController = new AbortController();
 
   try {
     const [detailResult, capabilityResult] = await Promise.allSettled([
@@ -1096,9 +1310,11 @@ async function openDossier(hsCode, trigger) {
     if (detailResult.status === 'rejected') throw detailResult.reason;
 
     const detail = detailResult.value;
-    const capability = capabilityResult.status === 'fulfilled'
+    const capabilityLoaded = capabilityResult.status === 'fulfilled';
+    const capability = capabilityLoaded
       ? capabilityResult.value
       : { items: [] };
+    if (capabilityLoaded) writeDetailCache(hsCode, detail, capability);
     const verifiedCapex = Array.isArray(capability.items) && capability.items.some((item) => (
       item
       && item.verified === true
@@ -1108,16 +1324,17 @@ async function openDossier(hsCode, trigger) {
       )
     ));
     state.selected = { opportunity, detail, capability };
-    state.detailEvidence[hsCode] = {
-      supplier: Array.isArray(detail.partners) && detail.partners.length > 0,
-      capex: verifiedCapex,
-      snapshot: currentEvidenceSnapshot(),
-      checkedAt: Date.now()
-    };
-    persistJSON(STORAGE_KEYS.evidence, state.detailEvidence);
+    if (capabilityLoaded) {
+      state.detailEvidence[hsCode] = {
+        supplier: Array.isArray(detail.partners) && detail.partners.length > 0,
+        capex: verifiedCapex,
+        snapshot: currentEvidenceSnapshot(),
+        checkedAt: Date.now()
+      };
+      persistJSON(STORAGE_KEYS.evidence, state.detailEvidence);
+    }
     renderDossier();
     renderPortfolioStats();
-    renderOpportunityResults();
   } catch (error) {
     if (error.name === 'AbortError' || requestId !== state.detailRequestId) return;
     console.error(error);
@@ -1137,11 +1354,17 @@ function showDossierShell(opportunity) {
     `Business route, complexity, evidence, and unresolved questions for ${opportunity.shortTitle}.`;
   document.getElementById('dossierCode').textContent = `HS ${opportunity.product.hs_code}`;
   document.getElementById('dossierContent').innerHTML = `
-    <div class="dossier-loading" role="status">
-      <span></span>
-      <strong>Loading trade records and route assumptions…</strong>
+    <div class="dossier-loading" role="status" aria-label="Loading trade records and route assumptions">
+      <div class="dossier-loading__hero">
+        <span>Full reality check</span>
+        <strong>${escapeHTML(opportunity.shortTitle)}</strong>
+        <p>${escapeHTML(opportunity.route.wedge)}</p>
+      </div>
+      <div class="dossier-loading__metrics"><i></i><i></i><i></i><i></i></div>
+      <div class="dossier-loading__body"><i></i><i></i><i></i></div>
     </div>
   `;
+  document.getElementById('dossierContent').scrollTop = 0;
   updateDossierSaveButton();
   requestAnimationFrame(() => {
     document.getElementById('closeDossierBtn').focus();
@@ -1150,18 +1373,32 @@ function showDossierShell(opportunity) {
 
 function closeDossier() {
   const dialog = document.getElementById('dossierDialog');
-  if (dialog.hidden) return;
+  if (dialog.hidden || dialog.classList.contains('is-closing')) return;
   if (state.detailController) state.detailController.abort();
   state.detailRequestId += 1;
   state.detailController = null;
-  dialog.hidden = true;
-  document.getElementById('dossierBackdrop').hidden = true;
-  document.body.classList.remove('dialog-open');
-  state.selected = null;
-  if (state.lastFocusedElement && document.contains(state.lastFocusedElement)) {
-    state.lastFocusedElement.focus();
-  }
-  state.lastFocusedElement = null;
+  const backdrop = document.getElementById('dossierBackdrop');
+  const focusToken = interactionFocusToken(state.lastFocusedElement);
+  const finish = () => {
+    state.dossierCloseTimer = null;
+    dialog.hidden = true;
+    backdrop.hidden = true;
+    dialog.classList.remove('is-closing');
+    backdrop.classList.remove('is-closing');
+    document.body.classList.remove('dialog-open');
+    state.selected = null;
+    if (state.portfolioDirty) {
+      renderPortfolio();
+      state.portfolioDirty = false;
+    }
+    if (focusToken) restoreInteractionFocus(focusToken, '#portfolioList, [data-action="navigate"][data-view="portfolio"]');
+    else if (state.lastFocusedElement && document.contains(state.lastFocusedElement)) state.lastFocusedElement.focus();
+    state.lastFocusedElement = null;
+  };
+  dialog.classList.add('is-closing');
+  backdrop.classList.add('is-closing');
+  if (reducedMotion()) finish();
+  else state.dossierCloseTimer = setTimeout(finish, 180);
 }
 
 function renderDossier() {
@@ -1198,7 +1435,11 @@ function renderDossier() {
           ${opportunity.isStructural ? '<span class="structural-tag">Structural exposure</span>' : ''}
         </div>
         <h1 class="business-title">${escapeHTML(opportunity.shortTitle)}</h1>
-        <p class="customs-title"><span>Official HS6 category</span>${escapeHTML(product.title || detail.description || 'Title unavailable')}</p>
+        <p class="dossier-route-summary">${escapeHTML(route.wedge)}</p>
+        <details class="customs-details">
+          <summary>Underlying trade category · HS ${escapeHTML(product.hs_code)}</summary>
+          <p>${escapeHTML(product.title || detail.description || 'Title unavailable')}</p>
+        </details>
         <div class="source-line">
           <span>Trade source <strong>${escapeHTML(formatSource(state.metadata.source || detail.source))}</strong></span>
           <span>Through <strong>${escapeHTML(formatPeriod(detail.latest_period || state.metadata.latestPeriod))}</strong></span>
@@ -1715,6 +1956,28 @@ function pruneDetailEvidence() {
   persistJSON(STORAGE_KEYS.evidence, state.detailEvidence);
 }
 
+function readDetailCache(hsCode) {
+  const key = String(hsCode);
+  const entry = state.detailCache.get(key);
+  if (!entry) return null;
+  if (!Number.isFinite(entry.cachedAt) || Date.now() - entry.cachedAt > DETAIL_CACHE_MAX_AGE_MS) {
+    state.detailCache.delete(key);
+    return null;
+  }
+  state.detailCache.delete(key);
+  state.detailCache.set(key, entry);
+  return entry;
+}
+
+function writeDetailCache(hsCode, detail, capability) {
+  const key = String(hsCode);
+  state.detailCache.delete(key);
+  state.detailCache.set(key, { detail, capability, cachedAt: Date.now() });
+  while (state.detailCache.size > DETAIL_CACHE_MAX_ITEMS) {
+    state.detailCache.delete(state.detailCache.keys().next().value);
+  }
+}
+
 function interactionFocusToken(element) {
   if (!element || !element.dataset || !element.dataset.action) return null;
   return {
@@ -1724,7 +1987,7 @@ function interactionFocusToken(element) {
   };
 }
 
-function restoreInteractionFocus(token) {
+function restoreInteractionFocus(token, fallbackSelector = '') {
   if (!token) return;
   requestAnimationFrame(() => {
     let selector = `[data-action="${cssEscape(token.action)}"]`;
@@ -1732,6 +1995,13 @@ function restoreInteractionFocus(token) {
     if (token.status) selector += `[data-status="${cssEscape(token.status)}"]`;
     const replacement = document.querySelector(selector);
     if (replacement) replacement.focus();
+    else if (fallbackSelector) {
+      const fallback = document.querySelector(fallbackSelector);
+      if (fallback) {
+        if (!fallback.matches('button, a[href], input, select, textarea, [tabindex]')) fallback.tabIndex = -1;
+        fallback.focus();
+      }
+    }
   });
 }
 
