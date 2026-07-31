@@ -141,6 +141,9 @@ def init_db(conn) -> None:
         cur.execute(
             "ALTER TABLE monthly_imports ADD COLUMN IF NOT EXISTS is_aggregate BOOLEAN DEFAULT false"
         )
+        cur.execute(
+            "ALTER TABLE monthly_imports ADD COLUMN IF NOT EXISTS created_at timestamptz DEFAULT now()"
+        )
         cur.execute("DROP INDEX IF EXISTS uq_monthly_imports_hs_ym_partner")
         cur.execute(
             """

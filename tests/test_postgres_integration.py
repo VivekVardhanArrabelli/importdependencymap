@@ -64,8 +64,7 @@ class PostgresIntegrationTest(unittest.TestCase):
                         value_inr NUMERIC,
                         fx_rate NUMERIC,
                         qty NUMERIC,
-                        partner_country TEXT,
-                        created_at timestamptz DEFAULT now()
+                        partner_country TEXT
                     );
                     CREATE UNIQUE INDEX uq_monthly_imports_hs_ym_partner
                       ON monthly_imports (hs_code, year, month, partner_country);
