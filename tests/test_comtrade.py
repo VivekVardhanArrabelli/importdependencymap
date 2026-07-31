@@ -144,7 +144,9 @@ class ComtradeCatalogContractTest(unittest.TestCase):
         with patch(
             "server.etl.comtrade.db.bulk_upsert_products",
             return_value=2,
-        ) as mock_upsert:
+        ) as mock_upsert, patch(
+            "server.etl.comtrade.db.replace_product_catalog_membership",
+        ) as mock_membership:
             synced = comtrade.sync_product_catalog(conn, products)
 
         self.assertEqual(synced, 2)
@@ -158,7 +160,9 @@ class ComtradeCatalogContractTest(unittest.TestCase):
             rows[0][1],
             "Electric accumulators; lithium-ion, including separators, whether or not rectangular (including square)",
         )
+        mock_membership.assert_called_once_with(conn, ["850760", "850780"])
 
+    @patch("server.etl.comtrade.db.replace_product_catalog_membership")
     @patch(
         "server.etl.comtrade.db.bulk_upsert_products",
         return_value=2,
@@ -168,6 +172,7 @@ class ComtradeCatalogContractTest(unittest.TestCase):
         self,
         mock_fetch,
         mock_upsert,
+        mock_membership,
     ):
         mock_fetch.return_value = comtrade._parse_catalog(self.payload)
 
@@ -177,6 +182,7 @@ class ComtradeCatalogContractTest(unittest.TestCase):
         mock_fetch.assert_called_once_with()
         mock_upsert.assert_called_once()
         self.assertEqual(len(mock_upsert.call_args.args[1]), 2)
+        mock_membership.assert_called_once()
 
 
 class ComtradeCurrentSchemaContractTest(unittest.TestCase):

@@ -117,7 +117,24 @@ class PostgresIntegrationTest(unittest.TestCase):
                         None,
                         None,
                     ),
+                    (
+                        "940540",
+                        "Obsolete HS revision product",
+                        "Must be retained historically but hidden from current catalogue",
+                        [],
+                        None,
+                        None,
+                    ),
                 ],
+            )
+            db.replace_product_catalog_membership(
+                conn,
+                ["850760", "999999"],
+            )
+            current_catalog = db.fetch_product_catalog(conn)
+            self.assertEqual(
+                [row["hs_code"] for row in current_catalog],
+                ["850760", "999999"],
             )
 
             aggregate_rows = []

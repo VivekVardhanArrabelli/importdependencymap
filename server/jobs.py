@@ -225,7 +225,9 @@ def recompute_baseline(conn=None) -> Dict[str, int]:
             return recompute_baseline(managed)
 
     with conn.cursor(cursor_factory=RealDictCursor) as cur:
-        cur.execute("SELECT hs_code FROM products ORDER BY hs_code")
+        cur.execute(
+            "SELECT hs_code FROM products WHERE catalog_active = true ORDER BY hs_code"
+        )
         products = [str(row["hs_code"]) for row in cur.fetchall()]
 
     totals_by_product, bounds = _load_monthly_totals(conn)
@@ -266,7 +268,14 @@ def recompute_progress(conn=None) -> Dict[str, int]:
             return recompute_progress(managed)
 
     with conn.cursor(cursor_factory=RealDictCursor) as cur:
-        cur.execute("SELECT hs_code, sectors FROM products ORDER BY hs_code")
+        cur.execute(
+            """
+            SELECT hs_code, sectors
+            FROM products
+            WHERE catalog_active = true
+            ORDER BY hs_code
+            """
+        )
         products = [
             (str(row["hs_code"]), list(row.get("sectors") or []))
             for row in cur.fetchall()
