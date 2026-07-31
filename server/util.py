@@ -44,12 +44,20 @@ def hhi_from_shares(shares: List[float]) -> float | None:
 
 
 SECTOR_TECH_FEASIBILITY = {
+    "agrifood": 0.65,
+    "chemicals": 0.55,
+    "materials": 0.65,
+    "textiles": 0.7,
+    "machinery": 0.6,
     "electronics": 0.7,
     "industrial": 0.6,
     "automotive": 0.5,
+    "mobility": 0.5,
     "metals": 0.65,
     "energy": 0.6,
     "instruments": 0.65,
+    "consumer": 0.7,
+    "controlled": 0.1,
 }
 
 

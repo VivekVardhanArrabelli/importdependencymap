@@ -70,7 +70,13 @@ def _parse_row(row: dict) -> Optional[Record]:
     partner = row.get("partner_country") or None
     title = (row.get("title") or "").strip()
     description = (row.get("description") or "").strip()
-    sectors = normalize.parse_csv_sectors(row.get("sectors", "")) or normalize.infer_sectors(title, description)
+    supplied_sectors = normalize.parse_csv_sectors(row.get("sectors", ""))
+    sectors = normalize.infer_sectors(
+        title,
+        description,
+        supplied_sectors,
+        hs_code=hs_code,
+    )
 
     try:
         fx_rate = forex.monthly_rate(year, month)

@@ -39,6 +39,9 @@ jobs:
       - name: Compile server
         run: python -m compileall server
       - name: Validate browser JavaScript
-        run: node --check client/app.js
+        run: |
+          node --check client/opportunity-model.js
+          node --check client/app.js
+          node --test tests/test_opportunity_model.js
       - name: Run tests
         run: pytest -q

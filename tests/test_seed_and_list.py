@@ -34,6 +34,20 @@ class SeedAndListingTest(unittest.TestCase):
             main.product_detail("123456")
         self.assertEqual(ctx.exception.status_code, 500)
 
+    def test_seed_rows_use_canonical_hs_sector_taxonomy(self):
+        row = main._parse_csv_row({
+            "hs_code": "848180",
+            "title": "Industrial valves",
+            "description": "General purpose industrial valves",
+            "sectors": "{industrial,metals}",
+            "capex_min": "",
+            "capex_max": "",
+            "seed_month_value": "",
+            "top_country": "",
+        })
+        self.assertEqual(row["hs_code"], "848180")
+        self.assertEqual(row["sectors"], ["machinery"])
+
 
 if __name__ == "__main__":  # pragma: no cover
     unittest.main()
