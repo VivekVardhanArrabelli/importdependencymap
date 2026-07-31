@@ -5,7 +5,7 @@ if (!Model) throw new Error('Opportunity model failed to load');
 
 const PRODUCT_PAGE_SIZE = 500;
 const MAX_PRODUCT_PAGES = 1000;
-const RESULT_INCREMENT = 18;
+const RESULT_INCREMENT = 9;
 const EVIDENCE_CACHE_MAX_AGE_MS = 24 * 60 * 60 * 1000;
 const STORAGE_KEYS = {
   profile: 'bfi_mandate_v3',
@@ -17,16 +17,16 @@ const STORAGE_KEYS = {
 };
 
 const ROLE_LABELS = {
-  build: 'Build a company',
-  back: 'Back an operator',
-  partner: 'Form a strategic venture'
+  build: 'Start a company',
+  back: 'Invest in an operator',
+  partner: 'Build with a partner'
 };
 
 const ENTRY_MODEL_LABELS = {
-  make: 'Manufacture',
-  assemble: 'Assemble or integrate',
-  contract: 'Contract make',
-  enable: 'Enable suppliers'
+  make: 'Make the product',
+  assemble: 'Assemble locally',
+  contract: 'Outsource manufacturing',
+  enable: 'Sell an enabling service'
 };
 
 const BUYER_LABELS = {
@@ -39,10 +39,10 @@ const BUYER_LABELS = {
 };
 
 const LENS_COPY = {
-  fit: 'Leads with personal feasibility, then uses national importance to order credible routes.',
-  national: 'Ranks import-value exposure and momentum; this does not prove a domestic capability gap.',
-  rising: 'Ranks routes by modeled time to a first paid proof; unresolved categories are shown last.',
-  wedge: 'Surfaces less-obvious, personally feasible routes with direct import-substitution potential.'
+  fit: 'Fits your money and deadline first; import significance breaks ties.',
+  national: 'Shows the largest and fastest-growing import categories, whether or not they fit you.',
+  rising: 'Shortest estimated path to a paying customer.',
+  wedge: 'Less obvious ways into large import categories.'
 };
 
 const usdCompactFormatter = new Intl.NumberFormat('en-US', {
@@ -90,6 +90,7 @@ const state = {
   detailRequestId: 0,
   detailController: null,
   lastFocusedElement: null,
+  profileLastFocusedElement: null,
   toastTimer: null,
   toastRequestId: 0,
   searchTimer: null
@@ -126,6 +127,7 @@ function wireEvents() {
   document.getElementById('downloadCsvBtn').addEventListener('click', exportOpportunityScreen);
   document.getElementById('exportPlanBtn').addEventListener('click', exportCapitalPlan);
   document.getElementById('themeToggle').addEventListener('click', toggleTheme);
+  document.getElementById('profileBackdrop').addEventListener('click', closeProfileEditor);
   document.getElementById('closeDossierBtn').addEventListener('click', closeDossier);
   document.getElementById('dossierBackdrop').addEventListener('click', closeDossier);
   document.getElementById('dossierSaveBtn').addEventListener('click', () => {
@@ -142,6 +144,14 @@ function handleDocumentClick(event) {
     event.preventDefault();
     closeDossier();
     switchView(actionTarget.dataset.view);
+    return;
+  }
+  if (action === 'open-profile') {
+    openProfileEditor(actionTarget);
+    return;
+  }
+  if (action === 'close-profile') {
+    closeProfileEditor();
     return;
   }
   if (action === 'set-lens') {
@@ -192,11 +202,14 @@ function handleDocumentInput(event) {
 }
 
 function handleKeydown(event) {
-  const dialog = document.getElementById('dossierDialog');
-  if (dialog.hidden) return;
+  const dossier = document.getElementById('dossierDialog');
+  const profile = document.getElementById('profileDialog');
+  const dialog = !dossier.hidden ? dossier : !profile.hidden ? profile : null;
+  if (!dialog) return;
   if (event.key === 'Escape') {
     event.preventDefault();
-    closeDossier();
+    if (!dossier.hidden) closeDossier();
+    else closeProfileEditor();
     return;
   }
   if (event.key !== 'Tab') return;
@@ -223,14 +236,36 @@ function handleMandateSubmit(event) {
   event.preventDefault();
   readProfileFromForm();
   renderDiscovery();
-  document.getElementById('opportunityMap').scrollIntoView({ behavior: reducedMotion() ? 'auto' : 'smooth' });
-  showToast('Opportunity map recalculated for your mandate');
+  closeProfileEditor();
+  document.getElementById('opportunityMap').scrollIntoView({ behavior: reducedMotion() ? 'auto' : 'smooth', block: 'start' });
+  showToast('Ranking rebuilt for what you can bring');
 }
 
 function handleMandateChange() {
   readProfileFromForm();
   renderDiscovery();
   if (state.view === 'portfolio') renderPortfolio();
+}
+
+function openProfileEditor(trigger) {
+  const dialog = document.getElementById('profileDialog');
+  state.profileLastFocusedElement = trigger || document.activeElement;
+  document.getElementById('profileBackdrop').hidden = false;
+  dialog.hidden = false;
+  document.body.classList.add('profile-open');
+  requestAnimationFrame(() => document.getElementById('closeProfileBtn').focus());
+}
+
+function closeProfileEditor() {
+  const dialog = document.getElementById('profileDialog');
+  if (dialog.hidden) return;
+  dialog.hidden = true;
+  document.getElementById('profileBackdrop').hidden = true;
+  document.body.classList.remove('profile-open');
+  if (state.profileLastFocusedElement && document.contains(state.profileLastFocusedElement)) {
+    state.profileLastFocusedElement.focus();
+  }
+  state.profileLastFocusedElement = null;
 }
 
 function handleSearchInput(event) {
@@ -384,7 +419,6 @@ async function loadProducts(force = false) {
     renderDiscovery();
     renderMethodCoverage();
     renderPortfolio();
-    showToast(`${numberFormatter.format(state.products.length)} markets and ${numberFormatter.format(state.routes.length)} reviewed routes ready`);
   } catch (error) {
     if (error.name === 'AbortError' || requestId !== state.loadRequestId) return;
     console.error(error);
@@ -489,6 +523,7 @@ function renderLoadingState() {
   document.getElementById('heroProductCount').textContent = '—';
   document.getElementById('heroLatestPeriod').textContent = '—';
   document.getElementById('resultsMeta').textContent = 'Loading trade demand across every current HS6 market…';
+  document.getElementById('leadOpportunity').innerHTML = '<div class="lead-loading" aria-hidden="true"></div>';
   document.getElementById('opportunityGrid').innerHTML = `
     <article class="loading-card" aria-hidden="true"></article>
     <article class="loading-card" aria-hidden="true"></article>
@@ -507,6 +542,14 @@ function renderLoadError(error) {
   indicator.classList.add('is-error');
   indicator.querySelector('span').textContent = 'Data offline';
   document.getElementById('resultsMeta').textContent = 'The evidence layer could not be loaded.';
+  document.getElementById('leadOpportunity').innerHTML = `
+    <div class="empty-state empty-state--error">
+      <span>Trade records unavailable</span>
+      <h3>We could not assemble a recommendation.</h3>
+      <p>${escapeHTML(error && error.message ? error.message : 'Try the source again.')}</p>
+      <button class="quiet-button" type="button" data-action="retry-load">Try again</button>
+    </div>
+  `;
   document.getElementById('opportunityGrid').innerHTML = `
     <div class="empty-state empty-state--error">
       <span>Connection interrupted</span>
@@ -533,7 +576,7 @@ function renderDataStatus() {
   const indicator = document.getElementById('liveIndicator');
   indicator.classList.add('is-live');
   indicator.classList.remove('is-error');
-  indicator.querySelector('span').textContent = 'Live data';
+  indicator.querySelector('span').textContent = `Data through ${formatPeriod(state.metadata.latestPeriod)}`;
   document.getElementById('heroMarketValue').textContent = formatUsdCompact(importTotal);
   document.getElementById('heroProductCount').textContent = numberFormatter.format(state.metadata.total);
   document.getElementById('heroLatestPeriod').textContent = formatPeriod(state.metadata.latestPeriod);
@@ -552,13 +595,15 @@ function renderMandateSummary() {
   const projectCapital = Model.projectCapital(state.profile);
   document.getElementById('mandateSummary').textContent = [
     ROLE_LABELS[state.profile.role],
-    `${formatInr(state.profile.capitalInr)} cheque`,
-    `${formatInr(projectCapital)} modeled stack`,
-    `paid proof within ${state.profile.horizonMonths}${state.profile.horizonMonths === 36 ? '+' : ''} months`,
+    `${formatInr(state.profile.capitalInr)} to invest`,
+    projectCapital > state.profile.capitalInr ? `up to ${formatInr(projectCapital)} with partners` : null,
+    `paying customer within ${state.profile.horizonMonths}${state.profile.horizonMonths === 36 ? '+' : ''} months`,
     ENTRY_MODEL_LABELS[state.profile.entryModel],
     BUYER_LABELS[state.profile.buyerAccess],
     selectedEdges
-  ].join(' · ');
+  ].filter(Boolean).join(' · ');
+  const profileButton = document.querySelector('.profile-button strong');
+  if (profileButton) profileButton.textContent = `${formatInr(state.profile.capitalInr)} · ${state.profile.horizonMonths}${state.profile.horizonMonths === 36 ? '+' : ''} months`;
   const status = document.getElementById('profileCompletenessStatus');
   if (status) status.textContent = `${completeness.answered}/${completeness.total} mandate signals · ${completeness.percentage}% specified`;
 }
@@ -593,50 +638,116 @@ function renderOpportunityResults() {
   });
 
   const visible = state.filtered.slice(0, state.filters.visibleCount);
+  const lead = document.getElementById('leadOpportunity');
   const grid = document.getElementById('opportunityGrid');
   if (!visible.length) {
-    grid.innerHTML = `
+    lead.innerHTML = `
       <div class="empty-state">
-        <span>No matching market</span>
-        <h3>Try a broader sector or search term.</h3>
-        <p>Zero-import markets stay out of the default ranked view but remain searchable.</p>
+        <span>No matching route</span>
+        <h3>Try a broader product or sector.</h3>
+        <p>Zero-import categories stay out of the default ranking but remain searchable.</p>
       </div>
     `;
+    grid.innerHTML = '';
   } else {
-    grid.innerHTML = visible.map((opportunity, index) => opportunityCard(opportunity, index)).join('');
+    lead.innerHTML = leadOpportunity(visible[0]);
+    grid.innerHTML = visible.slice(1).map((opportunity, index) => opportunityCard(opportunity, index + 1)).join('');
   }
 
-  const lensName = {
-    fit: 'personal feasibility tier, then fit',
-    national: 'national import signal',
-    rising: 'time to first paid proof',
-    wedge: 'surprising executable wedge'
-  }[state.filters.lens];
-  document.getElementById('resultsMeta').textContent =
-    `Showing ${numberFormatter.format(visible.length)} of ${numberFormatter.format(state.filtered.length)} markets ranked by ${lensName} · ${numberFormatter.format(state.routes.length)} reviewed entry routes`;
+  document.getElementById('resultsMeta').textContent = state.filters.query
+    ? `${numberFormatter.format(state.filtered.length)} matching categories · reviewed routes rank ahead of unresolved trade signals`
+    : `${numberFormatter.format(state.routes.length)} reviewed routes ranked for you · other import categories remain searchable as trade signals`;
   const loadMore = document.getElementById('loadMoreBtn');
   loadMore.hidden = visible.length >= state.filtered.length;
   if (!loadMore.hidden) {
-    loadMore.textContent = `Show ${Math.min(RESULT_INCREMENT, state.filtered.length - visible.length)} more opportunities`;
+    loadMore.textContent = `Show ${Math.min(RESULT_INCREMENT, state.filtered.length - visible.length)} more`;
   }
+}
+
+function humanVerdict(opportunity) {
+  return {
+    actionable: 'Fits your plan',
+    stretch: 'Close fit',
+    partner: 'Needs more capital',
+    research: 'Route not reviewed',
+    blocked: 'Not founder-scale'
+  }[opportunity.fitVerdict.id] || opportunity.fitVerdict.label;
+}
+
+function fitReason(opportunity) {
+  const route = opportunity.route;
+  const reasons = [];
+  const minimumMonths = Model.finiteNumber(route.months_min);
+  const minimumCapital = Model.finiteNumber(route.capital_min_inr);
+  if (minimumMonths !== null) {
+    reasons.push(minimumMonths <= state.profile.horizonMonths
+      ? `Can reach paid proof inside your ${state.profile.horizonMonths}-month deadline`
+      : `Needs at least ${minimumMonths} months; your deadline is ${state.profile.horizonMonths}`);
+  }
+  if (minimumCapital !== null) {
+    const gap = minimumCapital - opportunity.projectCapitalInr;
+    reasons.push(gap <= 0
+      ? 'Low-end screening estimate fits your funding plan'
+      : `Low-end estimate is ${formatInr(gap)} above your funding plan`);
+  }
+  const requiredStrengths = Array.isArray(route.required_strengths) ? route.required_strengths : [];
+  const missingStrengths = requiredStrengths.filter((strength) => !state.profile.strengths.includes(strength));
+  if (missingStrengths.length && reasons.length < 2) {
+    reasons.push(`Still needs ${missingStrengths.slice(0, 2).map(Model.strengthLabel).join(' and ').toLowerCase()}`);
+  }
+  if (state.profile.buyerAccess === 'none' && Array.isArray(route.buyer_types) && route.buyer_types.length && reasons.length < 2) {
+    reasons.push('Buyer access is still unproven');
+  }
+  return reasons.length ? reasons.slice(0, 2).join('. ') + '.' : opportunity.fitVerdict.detail;
+}
+
+function leadOpportunity(opportunity) {
+  const product = opportunity.product;
+  const hsCode = escapeHTML(product.hs_code);
+  const saved = isSaved(product.hs_code);
+  const sector = titleCase(opportunity.sectors[0] || 'unclassified');
+  const routeStatus = opportunity.route.confidence === 'curated_model' ? 'Reviewed route' : 'Trade signal only';
+  return `
+    <article class="lead-card">
+      <div class="lead-card__main">
+        <span class="lead-number">01</span>
+        <div class="lead-card__content">
+          <div class="lead-meta">
+            <span class="sector-tag">${escapeHTML(sector)} · HS ${hsCode}</span>
+            <span class="fit-verdict fit-verdict--${escapeHTML(opportunity.fitVerdict.id)}">${escapeHTML(humanVerdict(opportunity))}</span>
+            <span class="lead-route-tag">${escapeHTML(routeStatus)}</span>
+          </div>
+          <h3>${escapeHTML(opportunity.shortTitle)}</h3>
+          <p class="lead-wedge">${escapeHTML(opportunity.route.wedge)}</p>
+          <div class="lead-fit"><strong>Why it ranked here</strong><span>${escapeHTML(fitReason(opportunity))}</span></div>
+          <div class="lead-actions">
+            <button class="primary-button" type="button" data-action="open-dossier" data-hs-code="${hsCode}">See the full reality check <span aria-hidden="true">→</span></button>
+            <button class="lead-save${saved ? ' is-saved' : ''}" type="button" data-action="toggle-save" data-hs-code="${hsCode}" aria-pressed="${saved}">${saved ? 'Saved to compare' : 'Save to compare'}</button>
+          </div>
+        </div>
+      </div>
+      <aside class="lead-card__evidence">
+        <div class="lead-trade">
+          <span class="lead-trade-label">Trade record · whole HS6 category</span>
+          <strong>${formatUsdCompact(opportunity.importValue)}</strong>
+          <p>${escapeHTML(Model.trendNarrative(opportunity.reductionPct))}</p>
+          <small>This proves imports exist. It is not demand for ${escapeHTML(opportunity.shortTitle.toLowerCase())}, market size, or projected revenue.</small>
+        </div>
+        <div class="lead-facts">
+          <div><span>Screening estimate</span><strong>${escapeHTML(Model.capitalRangeLabel(opportunity.route))}</strong></div>
+          <div><span>Paid proof</span><strong>${escapeHTML(Model.monthRangeLabel(opportunity.route))}</strong></div>
+          <div><span>Startup complexity</span><strong>${escapeHTML(opportunity.complexity.label)} · ${opportunity.complexity.overall}/5</strong></div>
+          <div><span>Likely first buyer</span><strong>${escapeHTML(opportunity.route.buyer)}</strong></div>
+        </div>
+      </aside>
+    </article>
+  `;
 }
 
 function opportunityCard(opportunity, index) {
   const product = opportunity.product;
   const hsCode = escapeHTML(product.hs_code);
-  const saved = isSaved(product.hs_code);
-  const lensScore = Model.scoreForLens(opportunity, state.filters.lens);
-  const lensScoreLabel = state.filters.lens === 'rising' && opportunity.momentum === null
-    ? '—'
-    : String(Math.round(lensScore));
   const sector = opportunity.sectors[0] || 'unclassified';
-  const trendClass = opportunity.reductionPct === null
-    ? 'neutral'
-    : opportunity.reductionPct < -0.001
-      ? 'up'
-      : opportunity.reductionPct > 0.001
-        ? 'down'
-        : 'neutral';
   const structuralClass = opportunity.isStructural
     ? ' opportunity-card--structural'
     : ['controlled', 'strategic_asset', 'trade_signal'].includes(opportunity.classification.id)
@@ -645,88 +756,26 @@ function opportunityCard(opportunity, index) {
 
   return `
     <article class="opportunity-card${structuralClass}" tabindex="-1">
-      <header class="opportunity-card__header">
-        <div class="rank-mark">
-          <span>#${String(index + 1).padStart(2, '0')}</span>
-          <small>${escapeHTML(titleCase(sector))} · HS ${hsCode}</small>
-        </div>
-        <span class="fit-verdict fit-verdict--${escapeHTML(opportunity.fitVerdict.id)}">${escapeHTML(opportunity.fitVerdict.label)}</span>
-        <button
-          class="save-button${saved ? ' is-saved' : ''}"
-          type="button"
-          data-action="toggle-save"
-          data-hs-code="${hsCode}"
-          aria-pressed="${saved}"
-          aria-label="${saved ? 'Remove' : 'Add'} ${escapeHTML(opportunity.shortTitle)} ${saved ? 'from' : 'to'} opportunity desk"
-        >
-          <svg aria-hidden="true" viewBox="0 0 24 24"><path d="M6 4h12v17l-6-4-6 4V4Z" /></svg>
-        </button>
-      </header>
-
-      <div class="opportunity-card__identity">
-        <h3 class="business-title">${escapeHTML(opportunity.shortTitle)}</h3>
-        <p class="customs-title"><span>Official customs category</span>${escapeHTML(product.title || 'Title unavailable')}</p>
-      </div>
-
-      <div class="entry-wedge">
-        <span>${escapeHTML(ENTRY_MODEL_LABELS[opportunity.route.entry_model] || titleCase(opportunity.route.entry_model))} route <i class="fact-type fact-type--assumption">Modeled</i></span>
+      <div class="card-rank">${String(index + 1).padStart(2, '0')}</div>
+      <div class="card-identity">
+        <div class="card-meta"><span>${escapeHTML(titleCase(sector))}</span><span>HS ${hsCode}</span></div>
+        <h3>${escapeHTML(opportunity.shortTitle)}</h3>
         <p>${escapeHTML(opportunity.route.wedge)}</p>
       </div>
-
-      <div class="launch-envelope">
-        <div>
-          <span>Entry envelope <i class="fact-type fact-type--assumption">Modeled</i></span>
-          <strong>${escapeHTML(Model.capitalRangeLabel(opportunity.route))}</strong>
-        </div>
-        <div>
-          <span>First paid proof <i class="fact-type fact-type--assumption">Modeled</i></span>
-          <strong>${escapeHTML(Model.monthRangeLabel(opportunity.route))}</strong>
-        </div>
+      <div class="card-fit">
+        <strong>${escapeHTML(humanVerdict(opportunity))} · ${escapeHTML(opportunity.complexity.label)} ${opportunity.complexity.overall}/5</strong>
+        <small>${escapeHTML(fitReason(opportunity))}</small>
       </div>
-
-      <div class="opportunity-card__shock">
-        <div>
-          <span>India imported <i class="fact-type fact-type--observed">Observed</i></span>
-          <strong>${formatUsdCompact(opportunity.importValue)}</strong>
-          <small>in this HS6 market over 12 months</small>
-        </div>
-        <div>
-          <span>Direction <i class="fact-type fact-type--observed">Observed</i></span>
-          <strong class="trend-value trend-value--${trendClass}">${escapeHTML(Model.trendNarrative(opportunity.reductionPct))}</strong>
-        </div>
+      <div class="card-metric card-metric--entry"><span>Modeled entry</span><strong>${escapeHTML(Model.capitalRangeLabel(opportunity.route))}</strong></div>
+      <div class="card-metric card-metric--proof"><span>Paid proof</span><strong>${escapeHTML(Model.monthRangeLabel(opportunity.route))}</strong></div>
+      <div class="card-metric card-metric--trade"><span>Trade record</span><strong>${formatUsdCompact(opportunity.importValue)}</strong><small>${escapeHTML(shortTrendLabel(opportunity.reductionPct))}</small></div>
+      <button class="card-open-icon" type="button" data-action="open-dossier" data-hs-code="${hsCode}" aria-label="See the full reality check for ${escapeHTML(opportunity.shortTitle)}">→</button>
+      <div class="card-mobile-facts" aria-hidden="true">
+        <span>Entry<strong>${escapeHTML(Model.capitalRangeLabel(opportunity.route))}</strong></span>
+        <span>Proof<strong>${escapeHTML(Model.monthRangeLabel(opportunity.route))}</strong></span>
+        <span>Imports<strong>${formatUsdCompact(opportunity.importValue)}</strong></span>
+        <span>Difficulty<strong>${opportunity.complexity.overall}/5</strong></span>
       </div>
-
-      <div class="complexity-strip">
-        <div>
-          <span>Startup complexity</span>
-          <strong>${escapeHTML(opportunity.complexity.label)}</strong>
-        </div>
-        <div class="complexity-dots" aria-label="${opportunity.complexity.overall} out of 5 complexity">
-          ${renderComplexityDots(opportunity.complexity.overall)}
-        </div>
-      </div>
-
-      <div class="critical-info">
-        <div><span>Likely buyer</span><strong>${escapeHTML(opportunity.route.buyer)}</strong></div>
-        <div><span>First proof</span><strong>${escapeHTML(opportunity.route.first_proof)}</strong></div>
-      </div>
-
-      <footer class="opportunity-card__footer">
-        <div class="dual-score" aria-label="National and personal scores">
-          <span>India <strong>${Math.round(opportunity.countrySignal)}</strong></span>
-          <span>You <strong>${Math.round(opportunity.personalFit)}</strong></span>
-        </div>
-        <button
-          class="card-open-button"
-          type="button"
-          data-action="open-dossier"
-          data-hs-code="${hsCode}"
-        >
-          See the business case
-          <svg aria-hidden="true" viewBox="0 0 24 24"><path d="m5 12 14 0m-5-5 5 5-5 5" /></svg>
-        </button>
-        <span class="lens-score" title="Selected-lens score">${lensScoreLabel}</span>
-      </footer>
     </article>
   `;
 }
@@ -738,13 +787,13 @@ function toggleShortlist(hsCode) {
     state.shortlist.splice(existingIndex, 1);
     delete state.allocations[normalized];
     persistJSON(STORAGE_KEYS.allocations, state.allocations);
-    showToast('Removed from opportunity desk');
+    showToast('Removed from compare');
   } else {
     const product = state.products.find((item) => String(item.hs_code) === normalized)
       || (state.selected && state.selected.opportunity.product);
     if (!product) return;
     state.shortlist.unshift(snapshotProduct(product));
-    showToast('Added to opportunity desk');
+    showToast('Saved to compare');
   }
   persistJSON(STORAGE_KEYS.shortlist, state.shortlist);
   updateSavedCount();
@@ -762,7 +811,7 @@ function removeFromPlan(hsCode) {
   updateSavedCount();
   renderPortfolio();
   renderOpportunityResults();
-  showToast('Removed from opportunity desk');
+  showToast('Removed from compare');
 }
 
 function snapshotProduct(product) {
@@ -812,7 +861,7 @@ function renderPortfolio() {
       <article class="portfolio-row">
         <div class="portfolio-rank">${String(index + 1).padStart(2, '0')}</div>
         <div class="portfolio-identity">
-          <span class="fit-verdict fit-verdict--${escapeHTML(opportunity.fitVerdict.id)}">${escapeHTML(opportunity.fitVerdict.label)}</span>
+          <span class="fit-verdict fit-verdict--${escapeHTML(opportunity.fitVerdict.id)}">${escapeHTML(humanVerdict(opportunity))}</span>
           <h3>${escapeHTML(opportunity.shortTitle)}</h3>
           <p>${escapeHTML(opportunity.route.wedge)}</p>
           <small>HS ${escapeHTML(saved.hs_code)} · ${formatUsdCompact(opportunity.importValue)} annual imports · ${escapeHTML(opportunity.complexity.label)}</small>
@@ -851,10 +900,15 @@ function renderPortfolioStats() {
     const value = Model.finiteNumber(state.allocations[item.hs_code]);
     return sum + (value === null ? 0 : Math.max(0, value));
   }, 0);
-  const exposure = state.shortlist.reduce((sum, saved) => {
+  const criticalQuestions = state.shortlist.reduce((sum, saved) => {
     const product = state.products.find((item) => String(item.hs_code) === saved.hs_code) || saved;
-    const value = Model.finiteNumber(product.last_12m_value_usd);
-    return sum + (value === null ? 0 : value);
+    const opportunity = Model.deriveOpportunity(
+      product,
+      state.profile,
+      state.marketContext || Model.createMarketContext([product]),
+      state.routes
+    );
+    return sum + (Array.isArray(opportunity.route.critical_unknowns) ? opportunity.route.critical_unknowns.length : 0);
   }, 0);
   const researchOnly = state.shortlist.reduce((sum, saved) => {
     const product = state.products.find((item) => String(item.hs_code) === saved.hs_code) || saved;
@@ -871,7 +925,7 @@ function renderPortfolioStats() {
   document.getElementById('portfolioAllocated').textContent = formatInr(allocated);
   document.getElementById('portfolioCount').textContent = numberFormatter.format(state.shortlist.length);
   document.getElementById('portfolioExposure').textContent = state.shortlist.length
-    ? formatUsdCompact(exposure)
+    ? numberFormatter.format(criticalQuestions)
     : '—';
 
   const allocationStatus = document.getElementById('portfolioAllocationStatus');
@@ -1078,14 +1132,14 @@ function showDossierShell(opportunity) {
   document.getElementById('dossierBackdrop').hidden = false;
   dialog.hidden = false;
   document.body.classList.add('dialog-open');
-  document.getElementById('dossierTitle').textContent = 'Opportunity dossier';
+  document.getElementById('dossierTitle').textContent = 'Full reality check';
   document.getElementById('dossierDescription').textContent =
     `Business route, complexity, evidence, and unresolved questions for ${opportunity.shortTitle}.`;
   document.getElementById('dossierCode').textContent = `HS ${opportunity.product.hs_code}`;
   document.getElementById('dossierContent').innerHTML = `
     <div class="dossier-loading" role="status">
       <span></span>
-      <strong>Assembling demand, supplier, and capability evidence…</strong>
+      <strong>Loading trade records and route assumptions…</strong>
     </div>
   `;
   updateDossierSaveButton();
@@ -1140,7 +1194,7 @@ function renderDossier() {
         <div class="dossier-tags">
           <span class="sector-tag">${escapeHTML(titleCase(opportunity.sectors[0] || 'unclassified'))}</span>
           <span class="classification-tag">${escapeHTML(opportunity.classification.label)}</span>
-          <span class="fit-verdict fit-verdict--${escapeHTML(opportunity.fitVerdict.id)}">${escapeHTML(opportunity.fitVerdict.label)}</span>
+          <span class="fit-verdict fit-verdict--${escapeHTML(opportunity.fitVerdict.id)}">${escapeHTML(humanVerdict(opportunity))}</span>
           ${opportunity.isStructural ? '<span class="structural-tag">Structural exposure</span>' : ''}
         </div>
         <h1 class="business-title">${escapeHTML(opportunity.shortTitle)}</h1>
@@ -1164,21 +1218,21 @@ function renderDossier() {
           <small>${escapeHTML(Model.trendNarrative(product.reduction_pct))}</small>
         </article>
         <article>
-          <span>Country signal <i class="fact-type fact-type--derived">Derived</i></span>
-          <strong>${Math.round(opportunity.countrySignal)}<em>/100</em></strong>
-          <small>import-value scale + momentum</small>
+          <span>Screening estimate <i class="fact-type fact-type--assumption">Modeled</i></span>
+          <strong>${escapeHTML(Model.capitalRangeLabel(route))}</strong>
+          <small>money to test, not quoted plant CAPEX</small>
         </article>
         <article>
-          <span>Your mandate <i class="fact-type fact-type--derived">Derived</i></span>
-          <strong>${Math.round(opportunity.personalFit)}<em>/100</em></strong>
-          <small>capital, time, route, strengths, buyers and sector</small>
+          <span>Paying proof <i class="fact-type fact-type--assumption">Modeled</i></span>
+          <strong>${escapeHTML(Model.monthRangeLabel(route))}</strong>
+          <small>${escapeHTML(humanVerdict(opportunity))} for your current plan</small>
         </article>
       </section>
 
       <section class="business-brief">
         <header>
           <div>
-          <p class="section-kicker">Specific route in</p>
+          <p class="section-kicker">What you would sell</p>
           <h2>${escapeHTML(route.wedge)}</h2>
           </div>
         </header>
@@ -1187,16 +1241,16 @@ function renderDossier() {
           <p><strong>Excludes</strong>${escapeHTML(route.excludes)}</p>
         </div>
         <div class="fit-verdict-detail fit-verdict-detail--${escapeHTML(opportunity.fitVerdict.id)}">
-          <strong>${escapeHTML(opportunity.fitVerdict.label)}</strong>
-          <span>${escapeHTML(opportunity.fitVerdict.detail)}</span>
+          <strong>${escapeHTML(humanVerdict(opportunity))}</strong>
+          <span>${escapeHTML(fitReason(opportunity))}</span>
         </div>
       </section>
 
       <section class="launch-path" aria-labelledby="launch-path-title">
         <header>
           <div>
-            <p class="section-kicker">Launch path · modeled, not quoted plant CAPEX</p>
-            <h2 id="launch-path-title">How this could become a company test</h2>
+            <p class="section-kicker">First buyer and proof</p>
+            <h2 id="launch-path-title">What must happen before this is a business</h2>
           </div>
           <span class="evidence-status evidence-status--assumption">Modeled</span>
         </header>
@@ -1213,7 +1267,7 @@ function renderDossier() {
         <header>
           <div>
             <p class="section-kicker">Startup complexity</p>
-            <h2 id="complexity-title">${escapeHTML(opportunity.complexity.label)} · ${opportunity.complexity.overall}/5</h2>
+            <h2 id="complexity-title">How hard will this be? · ${opportunity.complexity.overall}/5</h2>
           </div>
           <div class="complexity-dots" aria-hidden="true">${renderComplexityDots(opportunity.complexity.overall)}</div>
         </header>
@@ -1234,22 +1288,22 @@ function renderDossier() {
           <section class="evidence-section" aria-labelledby="case-title">
             <header>
               <div>
-                <p class="section-kicker">Why now</p>
-                <h2 id="case-title">The business case to challenge</h2>
+                <p class="section-kicker">Why this ranked for you</p>
+                <h2 id="case-title">The case to challenge</h2>
               </div>
             </header>
             <p>${escapeHTML(buildThesis(opportunity, topPartner))}</p>
             <div class="thesis-caveat">
               <strong>What this does not prove</strong>
-              <span>Domestic absence, addressable demand, technical feasibility, customer conversion, verified project CAPEX, unit economics, policy eligibility, or investment return.</span>
+              <span>That buyers will switch, India lacks capable suppliers, or this route makes money. Import-substitution scenarios are not achievable market share, revenue, or expected return.</span>
             </div>
           </section>
 
           <section class="evidence-section" aria-labelledby="demand-evidence-title">
             <header>
               <div>
-                <p class="section-kicker">Demand evidence</p>
-                <h2 id="demand-evidence-title">Monthly import exposure</h2>
+                <p class="section-kicker">What India actually imported</p>
+                <h2 id="demand-evidence-title">Monthly trade record</h2>
               </div>
               <span class="evidence-status evidence-status--ready">Observed</span>
             </header>
@@ -1259,8 +1313,8 @@ function renderDossier() {
           <section class="evidence-section" aria-labelledby="supplier-evidence-title">
             <header>
               <div>
-                <p class="section-kicker">Supplier risk</p>
-                <h2 id="supplier-evidence-title">Where imports concentrate</h2>
+                <p class="section-kicker">Where it came from</p>
+                <h2 id="supplier-evidence-title">Supplier concentration</h2>
               </div>
               <span class="evidence-status ${partners.length ? 'evidence-status--ready' : 'evidence-status--gap'}">
                 ${partners.length ? 'Observed' : 'Evidence gap'}
@@ -1272,8 +1326,8 @@ function renderDossier() {
           <section class="evidence-section evidence-gaps" aria-labelledby="unknowns-title">
             <header>
               <div>
-                <p class="section-kicker">Kill questions</p>
-                <h2 id="unknowns-title">What must be true before capital moves</h2>
+                <p class="section-kicker">Still unknown</p>
+                <h2 id="unknowns-title">What could make this a bad business?</h2>
               </div>
               <span class="evidence-status evidence-status--gap">Unresolved</span>
             </header>
@@ -1283,20 +1337,6 @@ function renderDossier() {
         </div>
 
         <aside class="dossier-side">
-          <section class="scenario-panel">
-            <p class="section-kicker">Import-substitution scenario</p>
-            <div class="scenario-value">
-              <span id="dossierScenarioLabel">${formatPercentageNumber(state.profile.capturePct)} of imports</span>
-              <strong id="dossierScenarioValue">${formatUsdCompact(Model.scenarioValue(product.last_12m_value_usd, state.profile.capturePct))}</strong>
-              <small>gross annual import exposure addressed</small>
-            </div>
-            <label for="dossierCapture">
-              <span>Test a share from 0.1% to 5%</span>
-              <input id="dossierCapture" type="range" min="0.1" max="5" value="${state.profile.capturePct}" step="0.1" />
-            </label>
-            <p>This is a planning assumption, not achievable market share, revenue, or expected return.</p>
-          </section>
-
           <section class="capital-evidence">
             <header>
               <div>
@@ -1311,12 +1351,13 @@ function renderDossier() {
           </section>
 
           <section class="decision-panel">
-            <p class="section-kicker">Private notebook</p>
-            <h2>Record your thesis, not a fake stage.</h2>
+            <p class="section-kicker">Your working notes</p>
+            <h2>Write down evidence, not activity.</h2>
             <label for="decisionNotes">
-              <span>What did you learn? What would kill the case?</span>
-              <textarea id="decisionNotes" rows="7" maxlength="5000" placeholder="Buyer, price, qualification path, quote, disconfirming evidence…">${escapeHTML(notes)}</textarea>
+              <span>Buyer names, quoted prices, margin math, certification answers, and reasons to walk away.</span>
+              <textarea id="decisionNotes" rows="7" maxlength="5000" placeholder="What did you learn? What would kill this case?">${escapeHTML(notes)}</textarea>
             </label>
+            <p class="source-note">Record your thesis, not a fake stage.</p>
             <button
               class="secondary-button secondary-button--wide"
               type="button"
@@ -1328,7 +1369,7 @@ function renderDossier() {
       </div>
 
       <footer class="dossier-footer">
-        <p>No real-money transaction occurs here. Validate the route independently before committing capital.</p>
+        <p>This is a screening system, not investment advice. Validate independently before committing capital.</p>
         <button class="text-button" type="button" data-action="navigate" data-view="method">Read the ranking method</button>
       </footer>
     </article>
@@ -1350,12 +1391,12 @@ function renderDossierError(error) {
 function updateDossierSaveButton() {
   const button = document.getElementById('dossierSaveBtn');
   if (!state.selected) {
-    button.textContent = 'Add to opportunity desk';
+    button.textContent = 'Save to compare';
     button.setAttribute('aria-pressed', 'false');
     return;
   }
   const saved = isSaved(state.selected.opportunity.product.hs_code);
-  button.textContent = saved ? 'Remove from opportunity desk' : 'Add to opportunity desk';
+  button.textContent = saved ? 'Remove from compare' : 'Save to compare';
   button.setAttribute('aria-pressed', String(saved));
 }
 
