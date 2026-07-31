@@ -35,6 +35,24 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+
+@app.middleware("http")
+async def add_delivery_cache_headers(request: Request, call_next):
+    """Keep versioned assets fast while trade data refreshes in short windows."""
+
+    response = await call_next(request)
+    if request.method != "GET" or response.status_code >= 400:
+        return response
+
+    path = request.url.path
+    if path.startswith("/static/"):
+        response.headers["Cache-Control"] = "public, max-age=31536000, immutable"
+    elif path in {"/api/products", "/api/opportunity-routes"}:
+        response.headers["Cache-Control"] = "public, max-age=300, stale-while-revalidate=3600"
+    elif path.startswith("/api/products/") or path.startswith("/api/domestic_capability/"):
+        response.headers["Cache-Control"] = "public, max-age=300, stale-while-revalidate=1800"
+    return response
+
 BASE_DIR = Path(__file__).resolve().parent.parent
 CLIENT_DIR = BASE_DIR / "client"
 
@@ -539,7 +557,7 @@ def list_products(
     min_capex: Optional[float] = Query(default=None, ge=0),
     max_capex: Optional[float] = Query(default=None, ge=0),
     sort: str = Query(default="opportunity"),
-    limit: int = Query(default=100, ge=1, le=500),
+    limit: int = Query(default=100, ge=1, le=6000),
     offset: int = Query(default=0, ge=0),
     q: Optional[str] = Query(default=None, alias="q", description="Search by HS code or title"),
 ) -> Dict[str, Any]:

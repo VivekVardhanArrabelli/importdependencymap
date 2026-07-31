@@ -3,8 +3,10 @@ import unittest
 from unittest.mock import patch
 
 from fastapi import HTTPException
+from pydantic import ValidationError
 
 from server import main
+from server.schemas import ProductFilter
 
 
 class SeedAndListingTest(unittest.TestCase):
@@ -28,6 +30,11 @@ class SeedAndListingTest(unittest.TestCase):
                 limit=10,
             )
         self.assertEqual(ctx.exception.status_code, 500)
+
+    def test_catalogue_filter_accepts_one_complete_six_thousand_item_page(self):
+        self.assertEqual(ProductFilter(limit=6000).limit, 6000)
+        with self.assertRaises(ValidationError):
+            ProductFilter(limit=6001)
 
     def test_detail_requires_database(self):
         with self.assertRaises(HTTPException) as ctx:
