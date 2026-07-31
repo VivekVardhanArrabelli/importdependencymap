@@ -1,8 +1,24 @@
 # Build for India
 
-Build for India maps India's imports by HS6 commodity, measures import value
-and supplier concentration, and ranks domestic-manufacturing opportunities.
-The app is a FastAPI service backed by Postgres with a static browser client.
+Build for India is a capital-allocation operating system for domestic
+capability. It maps India's imports by HS6 commodity, turns observed demand
+into transparent opportunity signals, and helps a founder, operator, or
+capital partner move candidates from screening to diligence to a hypothetical
+capital plan. The app is a FastAPI service backed by Postgres with a
+dependency-light static browser client.
+
+The browser experience separates three kinds of information:
+
+- **Observed facts:** import value, baseline change, monthly demand, partner
+  mix, source, and period.
+- **Derived signals:** country import signal and mandate match, with the formula shown
+  in the product.
+- **Planning assumptions:** entry route and import-substitution scenarios.
+
+It does not execute investments, estimate returns, or treat import exposure as
+revenue. Capital shapes the suggested diligence route but is excluded from fit
+scoring because project-CAPEX coverage is not yet systematic. Isolated sourced
+records appear as evidence, not as a ranking input.
 
 ## What populates the app
 
@@ -73,6 +89,8 @@ Run validation:
 pytest -q
 python -m compileall server
 node --check client/app.js
+node --check client/opportunity-model.js
+node --test tests/test_opportunity_model.js
 ```
 
 ## Refreshing data
@@ -178,6 +196,26 @@ score remain unavailable rather than treating an unknown supplier mix as
 perfect diversification. Import values still populate, and a short anonymous
 live partner snapshot is shown on product detail. Missing values are never
 rendered as zero.
+
+The browser does not substitute a made-up value for that unavailable backend
+score. It presents two separate screening signals:
+
+```text
+CountryImportSignal = 70% import-value percentile + 30% import-value momentum
+MandateMatch = sector edge + milestone/ambition alignment + selected role
+CombinedFit = user-selected weighting of CountryImportSignal and MandateMatch
+```
+
+Sector groups are derived from official HS chapters rather than loose
+substring matching. This prevents false classifications such as `coiled` or
+`shelled` being treated as electronics because they contain `LED`. Energy is
+also retained as a cross-cutting tag for products such as batteries.
+Controlled chapter 93 goods are gated out of default founder results, and
+aircraft and vessels carry a strategic-asset gate.
+
+Gross import value is an exposure screen, not proof of dependence or a domestic
+capability gap. Production, export, price/quantity, buyer, and project evidence
+must be added during diligence before capital is committed.
 
 ## Railway deployment
 

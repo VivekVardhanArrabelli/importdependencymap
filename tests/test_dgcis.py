@@ -23,6 +23,12 @@ class DGCISTest(unittest.TestCase):
         self.assertIsNotNone(sample.value_usd)
         self.assertIsNotNone(sample.fx_rate)
 
+    def test_load_csv_replaces_legacy_sector_tags_with_hs_taxonomy(self):
+        records = dgcis.load_csv(Path("data/dgcis_sample.csv"))
+        by_code = {record.hs_code: record for record in records}
+        self.assertEqual(by_code["848180"].sectors, ["machinery"])
+        self.assertEqual(by_code["850760"].sectors, ["electronics", "energy"])
+
     @patch("server.etl.dgcis.db.insert_monthly")
     @patch("server.etl.dgcis.db.upsert_product")
     def test_load_inserts_into_database(self, mock_upsert, mock_insert):

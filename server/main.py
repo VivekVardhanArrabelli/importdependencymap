@@ -104,14 +104,23 @@ def _read_seed_rows() -> List[Dict[str, str]]:
 
 
 def _parse_csv_row(row: Dict[str, str]) -> Dict[str, Any]:
-    sectors = normalize.parse_csv_sectors(row.get("sectors", ""))
+    hs_code = normalize.canonical_hs_code(row.get("hs_code") or "") or ""
+    title = (row.get("title") or "").strip()
+    description = (row.get("description") or "").strip()
+    supplied_sectors = normalize.parse_csv_sectors(row.get("sectors", ""))
+    sectors = normalize.infer_sectors(
+        title,
+        description,
+        supplied_sectors,
+        hs_code=hs_code,
+    )
     capex_min = row.get("capex_min")
     capex_max = row.get("capex_max")
     seed_value = row.get("seed_month_value")
     return {
-        "hs_code": (row.get("hs_code") or "").strip(),
-        "title": (row.get("title") or "").strip(),
-        "description": (row.get("description") or "").strip(),
+        "hs_code": hs_code,
+        "title": title,
+        "description": description,
         "sectors": sectors,
         "capex_min": float(capex_min) if capex_min else None,
         "capex_max": float(capex_max) if capex_max else None,

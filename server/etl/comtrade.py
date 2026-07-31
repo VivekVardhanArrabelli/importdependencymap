@@ -395,7 +395,7 @@ def _parse_catalog(payload: Dict) -> List[CatalogProduct]:
                 hs_code=raw_code,
                 title=title,
                 description=title,
-                sectors=normalize.infer_sectors(title),
+                sectors=normalize.infer_sectors(title, hs_code=raw_code),
             )
         )
         seen.add(raw_code)
@@ -536,7 +536,7 @@ def _parse_dataset(dataset: Iterable[Dict]) -> List[Record]:
         )
         qty = _as_float(_first_present(row, "qty", "altQty"))
         net_weight = _as_float(_first_present(row, "netWgt", "NetWeight", "netWeight"))
-        sectors = normalize.infer_sectors(title, description)
+        sectors = normalize.infer_sectors(title, description, hs_code=hs_code)
         records.append(
             Record(
                 hs_code=hs_code,

@@ -3,259 +3,463 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <meta http-equiv="Cache-Control" content="no-store, no-cache, must-revalidate" />
-    <meta http-equiv="Pragma" content="no-cache" />
-    <meta http-equiv="Expires" content="0" />
-    <meta name="description" content="Track India's import dependencies, identify manufacturing opportunities, and build domestic capability." />
-    <title>Build for India — Import Intelligence</title>
-    
-    <!-- Neoclassical Typography -->
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@400;500;700&family=Playfair+Display:ital,wght@0,400;0,600;0,700;1,400&family=Tenor+Sans&display=swap" rel="stylesheet">
-    
-    <link rel="stylesheet" href="/static/styles.css?v=6" />
+    <meta name="theme-color" content="#101a24" />
+    <meta
+      name="description"
+      content="Build for India turns live import demand into a ranked pipeline of domestic capability opportunities to build, back, or partner on."
+    />
+    <title>Build for India — Capital for Capability</title>
+    <link rel="stylesheet" href="/static/styles.css?v=20260731-1" />
   </head>
   <body>
+    <a class="skip-link" href="#main-content">Skip to opportunity map</a>
 
-    <a class="skip-link" href="#main-content">Skip to content</a>
+    <header class="command-bar">
+      <a class="brand" href="#discover" data-action="navigate" data-view="discover" aria-label="Build for India home">
+        <span class="brand-mark" aria-hidden="true">BFI</span>
+        <span class="brand-copy">
+          <strong>Build for India</strong>
+          <small>Capital for capability</small>
+        </span>
+      </a>
 
-    <div class="app-container">
-      <!-- Top Navigation -->
-      <header class="topbar">
-        <div class="brand">
-          <span class="brand__logo">🏛️</span>
-          <span>
-            Build for India
-            <small>Import Intelligence</small>
-          </span>
+      <nav class="primary-nav" aria-label="Primary navigation">
+        <button class="nav-item is-active" type="button" data-action="navigate" data-view="discover">Opportunity map</button>
+        <button class="nav-item" type="button" data-action="navigate" data-view="portfolio">
+          Capital plan
+          <span class="nav-count" id="savedCount">0</span>
+        </button>
+        <button class="nav-item" type="button" data-action="navigate" data-view="method">Method</button>
+      </nav>
+
+      <div class="command-actions">
+        <span class="live-indicator" id="liveIndicator"><i aria-hidden="true"></i><span>Connecting</span></span>
+        <button class="icon-button" id="themeToggle" type="button" aria-label="Switch color theme">
+          <svg aria-hidden="true" viewBox="0 0 24 24">
+            <path d="M12 3v2m0 14v2M3 12h2m14 0h2M5.64 5.64l1.42 1.42m9.88 9.88 1.42 1.42M18.36 5.64l-1.42 1.42M7.06 16.94l-1.42 1.42M16 12a4 4 0 1 1-8 0 4 4 0 0 1 8 0Z" />
+          </svg>
+        </button>
+      </div>
+    </header>
+
+    <main id="main-content">
+      <section class="app-view is-active" id="view-discover" data-view-panel="discover">
+        <section class="hero-shell" aria-labelledby="hero-title">
+          <div class="hero-copy">
+            <p class="eyebrow">India's import-exposure opportunity engine</p>
+            <h1 id="hero-title">Find where imported demand may justify Indian capability.</h1>
+            <p class="hero-lede">
+              Turn observed import demand into a ranked pipeline of markets to investigate
+              as companies to build, operators to back, or strategic ventures to form.
+            </p>
+
+            <div class="proof-strip" aria-label="Live data coverage">
+              <div>
+                <strong id="heroMarketValue">—</strong>
+                <span>annual import pool mapped</span>
+              </div>
+              <div>
+                <strong id="heroProductCount">—</strong>
+                <span>HS6 markets screened</span>
+              </div>
+              <div>
+                <strong id="heroLatestPeriod">—</strong>
+                <span>latest trade period</span>
+              </div>
+            </div>
+
+            <div class="hero-principle">
+              <span class="principle-number">01</span>
+              <p>
+                This is an evidence-backed screen, not a feed of startup ideas.
+                Execution economics still require diligence.
+              </p>
+            </div>
+          </div>
+
+          <form class="mandate-card" id="mandateForm">
+            <div class="mandate-heading">
+              <div>
+                <p class="section-kicker">Build your mandate</p>
+                <h2>What can you move?</h2>
+              </div>
+              <span class="model-badge">Local model</span>
+            </div>
+
+            <fieldset class="field-block">
+              <legend>I want to</legend>
+              <div class="segmented-control segmented-control--three">
+                <label>
+                  <input type="radio" name="role" value="build" checked />
+                  <span>Build</span>
+                </label>
+                <label>
+                  <input type="radio" name="role" value="back" />
+                  <span>Back</span>
+                </label>
+                <label>
+                  <input type="radio" name="role" value="partner" />
+                  <span>Partner</span>
+                </label>
+              </div>
+            </fieldset>
+
+            <fieldset class="field-block">
+              <legend>Capital available</legend>
+              <div class="capital-presets">
+                <label><input type="radio" name="capital" value="2500000" /><span>₹25L</span></label>
+                <label><input type="radio" name="capital" value="10000000" /><span>₹1Cr</span></label>
+                <label><input type="radio" name="capital" value="50000000" checked /><span>₹5Cr</span></label>
+                <label><input type="radio" name="capital" value="250000000" /><span>₹25Cr</span></label>
+                <label><input type="radio" name="capital" value="1000000000" /><span>₹100Cr+</span></label>
+              </div>
+              <p class="field-note">Shapes the diligence route only. It is excluded from ranking because project CAPEX coverage is not yet systematic.</p>
+            </fieldset>
+
+            <div class="field-pair">
+              <label class="select-field">
+                <span>Time to first operating milestone</span>
+                <select name="horizon" id="horizonSelect">
+                  <option value="12">Within 12 months</option>
+                  <option value="24" selected>About 24 months</option>
+                  <option value="36">36+ months</option>
+                </select>
+              </label>
+              <label class="select-field">
+                <span>Execution ambition</span>
+                <select name="risk" id="riskSelect">
+                  <option value="resilient">Focused wedge</option>
+                  <option value="balanced" selected>Scaled build</option>
+                  <option value="frontier">Frontier capability</option>
+                </select>
+              </label>
+            </div>
+
+            <fieldset class="field-block">
+              <legend>Where I have an edge <small>optional</small></legend>
+              <div class="edge-grid" id="edgeGrid">
+                <label><input type="checkbox" name="sector" value="agrifood" /><span>Agrifood</span></label>
+                <label><input type="checkbox" name="sector" value="chemicals" /><span>Chemicals</span></label>
+                <label><input type="checkbox" name="sector" value="materials" /><span>Materials</span></label>
+                <label><input type="checkbox" name="sector" value="textiles" /><span>Textiles</span></label>
+                <label><input type="checkbox" name="sector" value="metals" /><span>Metals</span></label>
+                <label><input type="checkbox" name="sector" value="machinery" /><span>Machinery</span></label>
+                <label><input type="checkbox" name="sector" value="electronics" /><span>Electronics</span></label>
+                <label><input type="checkbox" name="sector" value="mobility" /><span>Mobility</span></label>
+                <label><input type="checkbox" name="sector" value="energy" /><span>Energy</span></label>
+                <label><input type="checkbox" name="sector" value="instruments" /><span>Instruments</span></label>
+                <label><input type="checkbox" name="sector" value="consumer" /><span>Consumer</span></label>
+              </div>
+            </fieldset>
+
+            <label class="range-field" for="countryWeight">
+              <span>
+                <b>Your edge</b>
+                <output id="countryWeightOutput">40 / 60</output>
+                <b>Country signal</b>
+              </span>
+              <input id="countryWeight" name="countryWeight" type="range" min="0" max="100" value="60" step="5" />
+            </label>
+
+            <button class="primary-button primary-button--wide" type="submit">
+              Generate my opportunity map
+              <svg aria-hidden="true" viewBox="0 0 24 24"><path d="m5 12 14 0m-5-5 5 5-5 5" /></svg>
+            </button>
+            <p class="legal-line">Capital-planning intelligence. Not investment advice or an offer to invest.</p>
+          </form>
+        </section>
+
+        <section class="data-ribbon" id="dataStatus" aria-live="polite" aria-busy="true">
+          <div>
+            <span class="status-dot" aria-hidden="true"></span>
+            <strong id="populationStatus">Loading the complete opportunity universe…</strong>
+          </div>
+          <dl>
+            <div><dt>Source</dt><dd id="sourceStatus">—</dd></div>
+            <div><dt>Through</dt><dd id="periodStatus">—</dd></div>
+            <div><dt>Model</dt><dd>Demand + mandate</dd></div>
+          </dl>
+          <button class="text-button" id="refreshBtn" type="button">Refresh data</button>
+        </section>
+
+        <section class="opportunity-section" id="opportunityMap" aria-labelledby="map-title">
+          <header class="section-header">
+            <div>
+              <p class="section-kicker">Opportunity map</p>
+              <h2 id="map-title">Your ranked field of action</h2>
+              <p class="section-description" id="mandateSummary">Build · ₹5Cr · 24-month milestone · Scaled build</p>
+            </div>
+            <div class="section-actions">
+              <button class="secondary-button" id="downloadCsvBtn" type="button">
+                Export screen
+              </button>
+            </div>
+          </header>
+
+          <div class="lens-bar">
+            <div class="lens-tabs" role="group" aria-label="Rank opportunities by">
+              <button class="lens-tab is-active" type="button" aria-pressed="true" data-action="set-lens" data-lens="fit">
+                Best combined fit
+              </button>
+              <button class="lens-tab" type="button" aria-pressed="false" data-action="set-lens" data-lens="national">
+                Import exposure
+              </button>
+              <button class="lens-tab" type="button" aria-pressed="false" data-action="set-lens" data-lens="rising">
+                Scale-adjusted momentum
+              </button>
+              <button class="lens-tab" type="button" aria-pressed="false" data-action="set-lens" data-lens="wedge">
+                Practical wedges
+              </button>
+            </div>
+            <p class="lens-explainer" id="lensExplainer">
+              Balances the country import signal with your selected mandate.
+            </p>
+          </div>
+
+          <div class="results-toolbar">
+            <label class="search-box" for="searchInput">
+              <svg aria-hidden="true" viewBox="0 0 24 24"><path d="m21 21-4.35-4.35m2.35-5.65a8 8 0 1 1-16 0 8 8 0 0 1 16 0Z" /></svg>
+              <span class="sr-only">Search opportunity markets</span>
+              <input id="searchInput" type="search" placeholder="Search batteries, machine tools, HS code…" autocomplete="off" />
+            </label>
+            <label class="toolbar-select">
+              <span class="sr-only">Filter by sector</span>
+              <select id="sectorFilter">
+                <option value="all">All sectors</option>
+                <option value="agrifood">Agrifood</option>
+                <option value="chemicals">Chemicals &amp; pharma</option>
+                <option value="materials">Materials</option>
+                <option value="textiles">Textiles &amp; apparel</option>
+                <option value="metals">Metals</option>
+                <option value="machinery">Machinery</option>
+                <option value="electronics">Electronics</option>
+                <option value="mobility">Mobility</option>
+                <option value="energy">Energy</option>
+                <option value="instruments">Instruments</option>
+                <option value="consumer">Consumer goods</option>
+              </select>
+            </label>
+            <label class="capture-control">
+              <span>Scenario</span>
+              <select id="captureSelect" aria-label="Import substitution scenario">
+                <option value="0.1">0.1% substitution</option>
+                <option value="0.5">0.5% substitution</option>
+                <option value="1" selected>1% substitution</option>
+                <option value="2">2% substitution</option>
+                <option value="5">5% substitution</option>
+              </select>
+            </label>
+          </div>
+
+          <div class="results-summary" aria-live="polite">
+            <p id="resultsMeta">Preparing the opportunity universe…</p>
+            <div class="evidence-legend" aria-label="Evidence legend">
+              <span><i class="legend-dot legend-dot--observed"></i>Observed</span>
+              <span><i class="legend-dot legend-dot--derived"></i>Derived</span>
+              <span><i class="legend-dot legend-dot--assumption"></i>Assumption</span>
+            </div>
+          </div>
+
+          <div class="opportunity-grid" id="opportunityGrid">
+            <article class="loading-card" aria-hidden="true"></article>
+            <article class="loading-card" aria-hidden="true"></article>
+            <article class="loading-card" aria-hidden="true"></article>
+          </div>
+          <div class="load-more-wrap">
+            <button class="secondary-button" id="loadMoreBtn" type="button" hidden>Show more opportunities</button>
+          </div>
+        </section>
+      </section>
+
+      <section class="app-view" id="view-portfolio" data-view-panel="portfolio" hidden>
+        <section class="workspace-shell">
+          <header class="workspace-header">
+            <div>
+              <p class="eyebrow">Capital plan</p>
+              <h1>Turn a shortlist into a decision pipeline.</h1>
+              <p>
+                Allocate hypothetical capital, surface evidence gaps, and move each
+                opportunity from signal to diligence.
+              </p>
+            </div>
+            <div class="local-only-note">
+              <svg aria-hidden="true" viewBox="0 0 24 24"><path d="M7 10V8a5 5 0 0 1 10 0v2m-11 0h12v10H6V10Z" /></svg>
+              Saved on this device
+            </div>
+          </header>
+
+          <div class="portfolio-stats">
+            <article>
+              <span>Available mandate</span>
+              <strong id="portfolioAvailable">₹5Cr</strong>
+            </article>
+            <article>
+              <span>Planned allocation</span>
+              <strong id="portfolioAllocated">₹0</strong>
+              <small id="portfolioAllocationStatus">Nothing allocated yet</small>
+            </article>
+            <article>
+              <span>Opportunities</span>
+              <strong id="portfolioCount">0</strong>
+            </article>
+            <article>
+              <span>Import exposure represented</span>
+              <strong id="portfolioExposure">—</strong>
+              <small>Gross annual pool, not projected revenue</small>
+            </article>
+          </div>
+
+          <div class="portfolio-toolbar">
+            <div>
+              <h2>Decision pipeline</h2>
+              <p id="portfolioEvidenceSummary">Add opportunities to begin a diligence plan.</p>
+            </div>
+            <button class="secondary-button" id="exportPlanBtn" type="button">Export capital plan</button>
+          </div>
+
+          <div class="portfolio-list" id="portfolioList"></div>
+        </section>
+      </section>
+
+      <section class="app-view" id="view-method" data-view-panel="method" hidden>
+        <section class="method-shell">
+          <header class="method-hero">
+            <p class="eyebrow">Method, not mystery</p>
+            <h1>Know what the system observed, derived, and still does not know.</h1>
+            <p>
+              The ranking is a transparent import-exposure screen. Gross imports do not
+              by themselves prove dependence, a domestic capability gap, factory feasibility,
+              or an attractive investment.
+            </p>
+          </header>
+
+          <div class="method-grid">
+            <article class="method-card method-card--observed">
+              <span class="method-index">A</span>
+              <p class="section-kicker">Observed facts</p>
+              <h2>Trade demand</h2>
+              <p>Annual import value, baseline change, monthly history, partner mix, and data period come from trade records.</p>
+              <ul>
+                <li><strong id="methodDemandCoverage">—</strong> markets with 12-month demand</li>
+                <li><strong id="methodTrendCoverage">—</strong> markets with baseline change</li>
+                <li>Supplier concentration is fetched when a dossier opens</li>
+              </ul>
+            </article>
+
+            <article class="method-card method-card--derived">
+              <span class="method-index">B</span>
+              <p class="section-kicker">Derived signals</p>
+              <h2>Country import signal</h2>
+              <p>
+                70% import-value percentile + 30% import-value momentum. Your combined
+                view weights that country signal against a mandate match.
+              </p>
+              <ul>
+                <li>Missing facts are omitted, never converted to zero</li>
+                <li>Sector groups come from HS chapters, not substring guesses</li>
+                <li>Structural commodities remain visible but are flagged</li>
+                <li>Controlled goods stay out of default founder results</li>
+                <li>Aircraft and vessels carry a strategic-asset gate</li>
+                <li>Every card explains why it surfaced</li>
+              </ul>
+            </article>
+
+            <article class="method-card method-card--assumption">
+              <span class="method-index">C</span>
+              <p class="section-kicker">Planning assumptions</p>
+              <h2>Execution route</h2>
+              <p>
+                Role, first-milestone timing, execution ambition, and sector edge shape a screening match. Capital
+                suggests a diligence route but does not prove project fit.
+              </p>
+              <ul>
+                <li><strong id="methodCapexCoverage">—</strong> catalogue markets with any unsourced CAPEX estimate</li>
+                <li>Capital changes the route, not the match score; isolated sourced records appear only as evidence</li>
+                <li>Technical feasibility and unit economics are not yet verified</li>
+                <li>Scenario value is gross import exposure, not revenue</li>
+              </ul>
+            </article>
+          </div>
+
+          <section class="formula-panel" aria-labelledby="formula-title">
+            <div>
+              <p class="section-kicker">Transparent ranking</p>
+              <h2 id="formula-title">Two signals. One adjustable priority.</h2>
+            </div>
+            <div class="formula">
+              <div><span>Country import signal</span><strong>70% import-value scale + 30% import-value momentum</strong></div>
+              <div><span>Mandate match</span><strong>Sector edge + milestone/ambition alignment + role</strong></div>
+              <div><span>Combined fit</span><strong>Your country ↔ personal weighting</strong></div>
+            </div>
+          </section>
+
+          <section class="source-panel">
+            <div>
+              <p class="section-kicker">Data roadmap</p>
+              <h2>Better data exists—and should be added deliberately.</h2>
+            </div>
+            <div class="source-list">
+              <a href="https://comtradeplus.un.org/" target="_blank" rel="noreferrer">
+                <span>Current automated source</span>
+                <strong>UN Comtrade</strong>
+                <small>Reliable international HS6 coverage and partner comparisons.</small>
+              </a>
+              <a href="https://tradestat.commerce.gov.in/meidb/commoditywise_import" target="_blank" rel="noreferrer">
+                <span>Preferred India source</span>
+                <strong>DGCI&amp;S TradeStat</strong>
+                <small>Official India data with deeper HS8 detail; use official exports, not brittle scraping.</small>
+              </a>
+              <a href="https://trade-analytics.commerce.gov.in/public/indiaTrade" target="_blank" rel="noreferrer">
+                <span>Official enrichment</span>
+                <strong>Trade Intelligence &amp; Analytics</strong>
+                <small>Useful validation and India-specific trade context.</small>
+              </a>
+              <a href="https://microdata.gov.in/NADA/index.php/catalog/256/study-description" target="_blank" rel="noreferrer">
+                <span>Domestic capability baseline</span>
+                <strong>MoSPI Annual Survey of Industries</strong>
+                <small>Factory output, inputs, fixed assets, and employment; requires a careful NIC-to-HS concordance.</small>
+              </a>
+            </div>
+          </section>
+        </section>
+      </section>
+    </main>
+
+    <div class="dialog-backdrop" id="dossierBackdrop" hidden></div>
+    <section
+      class="dossier"
+      id="dossierDialog"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="dossierTitle"
+      aria-describedby="dossierDescription"
+      tabindex="-1"
+      hidden
+    >
+      <header class="dossier-command">
+        <div class="dossier-command__label">
+          <span id="dossierTitle">Opportunity dossier</span>
+          <small id="dossierCode">HS —</small>
+          <p class="sr-only" id="dossierDescription">Evidence, scenarios, and diligence actions for the selected opportunity.</p>
         </div>
-
-        <nav aria-label="Primary">
-          <button class="nav-link active" data-view="dashboard">Dashboard</button>
-          <button class="nav-link" data-view="community">Community</button>
-          <button class="icon-btn theme-toggle" id="themeToggle" title="Toggle theme">☾</button>
-        </nav>
+        <div class="dossier-command__actions">
+          <button class="secondary-button secondary-button--compact" id="dossierSaveBtn" type="button">Add to capital plan</button>
+          <button class="icon-button icon-button--light" id="closeDossierBtn" type="button" aria-label="Close opportunity dossier">
+            <svg aria-hidden="true" viewBox="0 0 24 24"><path d="m6 6 12 12M18 6 6 18" /></svg>
+          </button>
+        </div>
       </header>
-
-      <main id="main-content">
-        
-        <!-- View: Dashboard -->
-        <div id="view-dashboard" class="view-section active">
-          
-          <div class="dashboard-header">
-            <h1 class="hero__title">Domestic Sovereignty</h1>
-            <div class="hero__actions">
-              <button id="refreshBtn" class="btn small outline">Refresh</button>
-              <button id="downloadCsvBtn" class="btn small outline">Export CSV</button>
-            </div>
-          </div>
-
-          <div class="data-status" id="dataStatus" role="status" aria-live="polite">
-            <span class="data-status__population" id="populationStatus">Loading complete catalogue…</span>
-            <span>Source <strong id="sourceStatus">—</strong></span>
-            <span>Latest period <strong id="periodStatus">—</strong></span>
-            <span>Updated <strong id="freshnessStatus">—</strong></span>
-          </div>
-
-          <!-- Stats Row -->
-          <div class="stats-grid" id="headlineStats">
-            <div class="stat-card">
-              <h3>Tracking</h3>
-              <p id="statTotalProducts">—</p>
-              <span class="stat-label">HS Codes</span>
-            </div>
-            <div class="stat-card">
-              <h3>Volume</h3>
-              <p id="statImportUsd">—</p>
-              <span class="stat-label">12m Import Value</span>
-            </div>
-            <div class="stat-card">
-              <h3>Opportunity</h3>
-              <p id="statAvgScore">—</p>
-              <span class="stat-label">Avg. Score</span>
-            </div>
-            <div class="stat-card alert">
-              <h3>Critical</h3>
-              <p id="statAlerts">—</p>
-              <span class="stat-label">High Alerts</span>
-            </div>
-          </div>
-
-          <div class="content-layout">
-            <!-- Left Filters Sidebar -->
-            <aside class="sidebar-filters">
-              <div class="panel sticky">
-                <h2 class="section-title">Refine</h2>
-                <div class="input-group">
-                  <label for="search">Search</label>
-                  <input id="search" type="text" placeholder="Search commodities..." />
-                </div>
-                <div class="input-group">
-                  <label for="sectors">Sectors</label>
-                  <input id="sectors" type="text" placeholder="electronics, industrial..." />
-                </div>
-                <div class="input-group-row">
-                  <div>
-                    <label>Min Capex</label>
-                    <input id="minCapex" type="number" min="0" step="10000" placeholder="0" />
-                  </div>
-                  <div>
-                    <label>Max Capex</label>
-                    <input id="maxCapex" type="number" min="0" step="10000" placeholder="∞" />
-                  </div>
-                </div>
-                <div class="input-group">
-                  <label for="sort">Ordering</label>
-                  <select id="sort">
-                    <option value="opportunity">Opportunity Score</option>
-                    <option value="progress">Import Reduction</option>
-                    <option value="value">Import Value</option>
-                  </select>
-                </div>
-                <button id="loadBtn" class="btn full">Apply Filters</button>
-              </div>
-              
-              <div class="panel">
-                 <h2 class="section-title small">Compare</h2>
-                 <form id="compareForm" class="compact-form">
-                    <select id="compareA"><option value="">Item A</option></select>
-                    <div style="text-align:center; font-style:italic; color:var(--text-gold)">vs</div>
-                    <select id="compareB"><option value="">Item B</option></select>
-                    <button class="btn small outline" type="submit">Analyze</button>
-                 </form>
-                 <div id="compareResults" class="compare-results-compact"></div>
-              </div>
-            </aside>
-
-            <!-- Main Results Area -->
-            <div class="main-results">
-              <div class="results-header">
-                <h2 class="section-title">Commodities</h2>
-                <div class="results-controls">
-                   <span class="meta-serif" id="resultsMeta">—</span>
-                   <div class="view-toggles">
-                     <button class="icon-btn active" id="viewGrid" title="Grid View">☷</button>
-                     <button class="icon-btn" id="viewTable" title="Table View">☰</button>
-                   </div>
-                </div>
-              </div>
-              
-              <div id="cards" class="cards-grid"></div>
-              <div id="tableContainer" class="table-container hidden">
-                <table class="data-table" id="resultsTable">
-                  <thead>
-                    <tr>
-                      <th>HS Code</th>
-                      <th>Title</th>
-                      <th>Sectors</th>
-                      <th class="text-right">Imports (12m)</th>
-                      <th class="text-right">Score</th>
-                      <th></th>
-                    </tr>
-                  </thead>
-                  <tbody></tbody>
-                </table>
-              </div>
-            </div>
-            
-            <!-- Right Sidebar: Watchlist & Alerts -->
-            <aside class="sidebar-extras">
-               <div class="panel">
-                  <h2 class="section-title small">Watchlist</h2>
-                  <ul id="watchlistList" class="compact-list"></ul>
-               </div>
-               <div class="panel">
-                  <h2 class="section-title small">Signals</h2>
-                  <ul id="alertsList" class="compact-list"></ul>
-               </div>
-            </aside>
-          </div>
-        </div>
-
-        <!-- View: Community -->
-        <div id="view-community" class="view-section hidden">
-           <div class="panel-header">
-             <h2 class="section-title">Registry</h2>
-             <p class="hero__subtitle">Connect with suppliers, vendors, and partners.</p>
-           </div>
-           <div class="community-layout">
-             <div class="panel">
-                <form id="communityForm" class="neoclassical-form">
-                  <div class="form-row">
-                    <label>Name / Org <input name="name" type="text" required /></label>
-                    <label>Category 
-                       <select name="category" required>
-                        <option value="Machinery vendor">Machinery</option>
-                        <option value="Tooling supplier">Tooling</option>
-                        <option value="Contract manufacturer">Contract Mfg</option>
-                      </select>
-                    </label>
-                  </div>
-                  <label>Location <input name="location" type="text" /></label>
-                  <label>Notes <textarea name="notes" rows="2"></textarea></label>
-                  <button class="btn primary" type="submit">Add Entry</button>
-                </form>
-             </div>
-             <ul id="communityList" class="community-grid"></ul>
-           </div>
-        </div>
-
-      </main>
-
-      <!-- Detail Drawer (Overlay) -->
-      <div class="drawer-backdrop hidden" id="drawerBackdrop"></div>
-      <div class="drawer hidden" id="detailDrawer">
-        <div class="drawer-header">
-          <h2 id="drawerTitle">Product Detail</h2>
-          <button class="close-btn" id="closeDrawer">×</button>
-        </div>
-        <div class="drawer-content">
-           <div class="drawer-actions">
-             <button id="drawerWatchBtn" class="btn outline small">Watch</button>
-           </div>
-           
-           <div class="insight-block">
-              <h3>Key Metrics</h3>
-              <ul id="detailSnapshot" class="serif-list"></ul>
-           </div>
-
-           <div class="chart-container frame">
-             <canvas id="trendChart"></canvas>
-           </div>
-
-           <div class="insight-block">
-	             <h3>Supplier mix</h3>
-	             <p id="partnerMeta" class="meta-serif">Partner data unavailable</p>
-             <div class="chart-donut-small">
-               <canvas id="partnerChart"></canvas>
-             </div>
-             <ul id="partnerList" class="partner-list"></ul>
-           </div>
-
-           <div class="drawer-section">
-             <h2 class="section-title small">Feasibility Study</h2>
-             <form id="businessCaseForm" class="compact-form">
-                <div class="form-row small-gap">
-                  <label>Target Output/Mo <input id="caseUnits" type="number" placeholder="1000" /></label>
-                  <label>Avg Price <input id="casePrice" type="number" placeholder="150" /></label>
-                </div>
-                <div class="form-row small-gap">
-                  <label>Replace % <input id="caseReplacement" type="number" placeholder="40" /></label>
-                  <label>Capex <input id="caseCapex" type="number" placeholder="Auto" /></label>
-                  <label>Opex/Mo <input id="caseOpex" type="number" placeholder="50000" /></label>
-                </div>
-                <button class="btn primary small" type="submit">Calculate</button>
-             </form>
-             <div id="businessCaseResults" class="metrics-grid compact"></div>
-           </div>
+      <div class="dossier-scroll" id="dossierContent">
+        <div class="dossier-loading" role="status">
+          <span></span>
+          <strong>Assembling the evidence room…</strong>
         </div>
       </div>
-    </div>
+    </section>
 
-    <div id="toast" class="toast" role="status" aria-live="polite" hidden></div>
+    <div class="toast" id="toast" role="status" aria-live="polite" hidden></div>
 
-    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-    <script src="/static/app.js?v=8"></script>
+    <script src="/static/opportunity-model.js?v=20260731-1"></script>
+    <script src="/static/app.js?v=20260731-1"></script>
   </body>
 </html>
